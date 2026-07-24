@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Generated output
+output/
+
+# KAPE / FastIR evidence
+input/KAPE_OUTPUT/
+
+# Logs
+*.log
+
+# Windows artifacts
+*.evtx
+*.pf
+*.db
+*.dat
+*.bin
+
+# MFT / USN
+$MFT
+$LogFile
+$Boot
+$Secure_$SDS
+
+# Timeline exports
+timeline.json
+normalized_events.json
