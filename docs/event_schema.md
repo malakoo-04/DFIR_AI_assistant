@@ -74,3 +74,37 @@ The event model follows a small set of architectural principles:
 4-Traceability first. Every event preserves its origin through source_file and raw_data.
 5-Correlation-friendly design. Frequently queried attributes (e.g., hashes, IDs, references) should be promoted to top-level fields whenever appropriate.
 6-Artifact-specific details belong in evidence. The evidence dictionary enriches the event without redefining its core identity.
+
+The Timeline Builder prepares events. It never interprets them.
+
+Canonical timestamp handling for the timeline stage.
+
+Every timeline event must expose a single "timestamp" field in the same
+canonical form before it can be validated, ordered, or exported. Normalizers
+may hand this stage either a native datetime (aware or naive) or an ISO-8601
+string — the latter matters once something reloads normalized_events.json
+from disk (a future correlation re-run) instead of receiving events
+in-memory from the same pipeline run.
+
+Canonical form: a naive datetime.datetime representing UTC wall-clock time.
+This matches what every parser/normalizer in this project already produces
+(TimeUtils, EVTXParser, and the LnkParse3-backed parsers all hand off
+tz-aware UTC datetimes; YARP's last_written_timestamp() was confirmed naive
+by direct testing, but registry hive timestamps are UTC by construction, so
+a naive value here is treated as already-UTC rather than as an error).
+
+Deterministic ordering for timeline events.
+
+Two events sharing the exact same timestamp are common in forensic data (a
+process launch and a registry write landing in the same second, a burst of
+USN records, etc.). Relying on Python's stable sort to preserve whatever
+order events happened to arrive in from the normalizer works today, but
+that order is an *implicit* property of the input, not a documented
+guarantee — a future change to discovery order, parser scheduling, or a
+correlation re-run could silently reorder same-timestamp events between
+runs. This module makes the tie-break explicit instead of relying on that.
+
+builder.py never sees a sort key or a tuple: it hands events to wrap() and
+gets a sorted list of events back from sort_events(). How ordering is
+actually implemented (tuples today, something else tomorrow) stays entirely
+inside this module.

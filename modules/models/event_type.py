@@ -82,3 +82,5 @@ class  EventType(str, Enum):
     DIRECTORY_CREATED="directory_created"
     DIRECTORY_DELETED="directory_deleted"
     TIMESTAMP_INCONSISTENCY="timestamp_inconsistency"
+
+    POWERSHELL_PIPELINE_EXECUTION = "powershell_pipeline_execution"

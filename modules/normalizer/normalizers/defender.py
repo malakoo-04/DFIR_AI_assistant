@@ -79,17 +79,17 @@ class DefenderNormalizer(BaseNormalizer):
                 event_type=event_type,
                 category=EventCategory.SECURITY,
                 timestamp=record.get("timestamp"),
-                source="defender",
                 artifact_type="defender",
                 object_name=record.get("component"),
                 object_path=None,
-               evidence={
+                description=message or f"Windows Defender event ({event_type.value})",
+                evidence={
                     "record_type": record.get("record_type"),
                     "component": record.get("component"),
                     "action": record.get("action"),
-                    "message": record.get("message"),
-                    "source_path": record.get("source_path"),
                 },
+                source_file=record.get("source_path"),
+                raw_data=record,
             )
 
 

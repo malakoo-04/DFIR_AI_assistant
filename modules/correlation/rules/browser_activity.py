@@ -10,33 +10,29 @@ from modules.models.severity import Severity
 from modules.normalizer.event import ensure_event_id
 
 
-class RegistryPersistenceRule(Rule):
+class BrowserActivityRule(Rule):
     """
-    Did we observe persistence through Registry Run / RunOnce / Services?
+    Surface raw browser activity: page visits and downloads.
 
-    The Registry normalizer already tags these as EventType.PERSISTENCE
-    (Run, RunOnce) and EventType.SERVICE_CREATED (Services\\<name>) with
-    category=PERSISTENCE, so this rule doesn't re-derive anything from
-    key_path -- it only selects those two event types and reports what
-    the timeline already shows. No cross-artifact identity is required:
-    each Registry event stands on its own here.
+    BrowserNormalizer emits EventType.URL_VISIT and EventType.FILE_DOWNLOAD.
+    Both are handled by this single rule -- they're the same family of
+    observation (what did the browser do), just two different actions.
     """
 
-    NAME = "registry_persistence"
+    NAME = "browser_activity"
 
     _TITLES = {
-        EventType.PERSISTENCE: "Registry Run/RunOnce persistence",
-        EventType.SERVICE_CREATED: "Windows service persistence",
+        EventType.URL_VISIT: "Browser page visit",
+        EventType.FILE_DOWNLOAD: "Browser file download",
     }
 
-    # Finding-level description, deliberately distinct from
-    # event["description"]: the event describes what was found in the
-    # registry (e.g. "Registry Run key: OneDrive"), the correlation
-    # describes the forensic behavior observed (persistence). Behavior
-    # Detection is what will later decide whether that's suspicious.
+    # LOW for both: visiting a page or downloading a file isn't inherently
+    # suspicious (downloading Chrome isn't malware). Downloading an
+    # executable that later gets run is the interesting signal -- that's
+    # a future multi-event rule (browser -> prefetch/USN), not this one.
     _DESCRIPTIONS = {
-        EventType.PERSISTENCE: "Registry persistence mechanism observed.",
-        EventType.SERVICE_CREATED: "Windows service persistence observed.",
+        EventType.URL_VISIT: "Browser page visit observed.",
+        EventType.FILE_DOWNLOAD: "Browser file download observed.",
     }
 
     def run(self, context: RuleContext) -> list[Correlation]:
@@ -45,7 +41,7 @@ class RegistryPersistenceRule(Rule):
         for event_context in context.timeline:
             event = event_context.event
 
-            if event.get("artifact_type") != "registry":
+            if event.get("artifact_type") != "browser":
                 continue
 
             event_type = event.get("event_type")
@@ -66,15 +62,7 @@ class RegistryPersistenceRule(Rule):
             correlation_id=correlation_id(self.NAME, event_id),
             rule_name=self.NAME,
             title=self._TITLES[event["event_type"]],
-            # A Run key or a new service is not inherently suspicious --
-            # OneDrive, Steam, Discord, Defender all do this. This rule
-            # only reports that persistence was observed; deciding
-            # whether it's suspicious (unsigned binary, temp folder,
-            # unusual name...) is Behavior Detection's job downstream,
-            # not this rule's.
             severity=Severity.LOW,
-            # Reuse the normalizer's own confidence rather than
-            # re-deriving one here -- this rule only observes.
             confidence=event.get("confidence", 1.0),
             start_time=timestamp,
             end_time=timestamp,

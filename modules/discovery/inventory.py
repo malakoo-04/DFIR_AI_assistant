@@ -63,7 +63,7 @@ class Inventory:
 
         counts = dict(sorted(counts.items()))
 
-        counts["TOTAL"] = len(self.artifacts)
+        counts["TO  TAL"] = len(self.artifacts)
 
         return counts
 

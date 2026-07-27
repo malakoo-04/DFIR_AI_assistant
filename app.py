@@ -1,11 +1,22 @@
+from modules.correlation.engine import CorrelationEngine
 from modules.discovery.scanner import DiscoveryEngine
 from modules.discovery.inventory import Inventory
 from modules.parsers.parser_manager import ParserManager
 from modules.normalizer.normalizer import Normalizer
 from modules.timeline.builder import TimelineBuilder
 from collections import Counter
+from modules.models.event_type import EventType
+from modules.correlation.rules.registry_persistence import RegistryPersistenceRule
+from modules.correlation.rules.scheduled_task_persistence import ScheduledTaskPersistenceRule
+from modules.correlation.rules.service_installation import ServiceInstallationRule
+from modules.correlation.rules.defender_detection import DefenderDetectionRule
+from modules.correlation.rules.event_log_cleared import EventLogClearedRule
+from modules.correlation.rules.usb_connection import USBConnectionRule
+from modules.correlation.rules.browser_activity import BrowserActivityRule
+from modules.correlation.rules.browser_download_execution import BrowserDownloadExecutionRule
 from modules.utils.json_export import export_json
-
+from dataclasses import asdict
+import json
 # ==========================
 # Discovery
 # ==========================
@@ -83,6 +94,27 @@ export_json(
 timeline_builder = TimelineBuilder()
 
 timeline = timeline_builder.build(normalized_events)
+
+correlation_engine = CorrelationEngine(
+    rules=[
+        RegistryPersistenceRule(),
+        ScheduledTaskPersistenceRule(),
+        ServiceInstallationRule(),
+        DefenderDetectionRule(),
+        EventLogClearedRule(),
+        USBConnectionRule(),
+        BrowserActivityRule(),
+        BrowserDownloadExecutionRule(),
+    ]
+)
+
+correlations = correlation_engine.run(timeline)
+
+export_json(
+    [asdict(c) for c in correlations],
+    "output/correlation/correlations.json",
+)
+
 export_json(
     timeline,
     "output/timeline/timeline.json"
@@ -102,6 +134,16 @@ print(f"Normalized events    : {len(normalized_events)}")
 
 print(f"Timeline events      : {len(timeline)}")
 
+print(f"Correlations        : {len(correlations)}")
+
+
+
+counter = Counter(c.rule_name for c in correlations)
+
+print("\n===== Correlations by rule =====")
+
+for rule, count in counter.items():
+    print(f"{rule:<35} {count}")
 
 report = timeline_builder.last_report
 
@@ -128,5 +170,22 @@ counter=Counter(
     (event["artifact_type"], event["event_type"])
     for event in normalized_events
 )
+
+print("\n===== POWERSHELL COMMAND LINES =====\n")
+
+for event in normalized_events:
+    if event.get("artifact_type") != "evtx":
+        continue
+
+    if str(event.get("event_type")) != "process_execution":
+        continue
+
+    cmd = event.get("evidence", {}).get("command_line")
+
+    if cmd:
+        print("=" * 80)
+        print("Time :", event.get("timestamp"))
+        print("Process :", event.get("object_name"))
+        print("Command :", cmd)
 
 

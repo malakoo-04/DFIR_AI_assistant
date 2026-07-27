@@ -1,6 +1,4 @@
 from pathlib import Path
-import struct
-import warnings
 
 from LnkParse3.lnk_file import LnkFile
 
@@ -42,7 +40,7 @@ class LNKParser(BaseParser):
 
             "lnk_name": source_name,
 
-            "lnk_path": source_path,
+            "source_path": source_path,
 
             # Cible
             "target_path": self._safe_call(lambda: lnk.info.local_base_path),
@@ -68,13 +66,23 @@ class LNKParser(BaseParser):
         }
 
     def parse(self, artifact_path: Path) -> list[dict]:
-        try:
-            with artifact_path.open("rb") as f:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", UserWarning)
-                    lnk = LnkFile(f)
-                    lnk.process()
-                return [self._parse_lnk(lnk, artifact_path.name, str(artifact_path))]
-        except (EOFError, OSError, ValueError, struct.error) as exc:
-            print(f"[LNK WARN] Skipping malformed shortcut {artifact_path}: {exc}")
-            return []
+
+        with artifact_path.open("rb") as f:
+
+            lnk = LnkFile(f)
+
+            lnk.process()
+
+            return [
+
+                self._parse_lnk(
+
+                    lnk,
+
+                    artifact_path.name,
+
+                    str(artifact_path)
+
+                )
+
+            ]
