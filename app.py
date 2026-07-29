@@ -14,6 +14,7 @@ from modules.correlation.rules.event_log_cleared import EventLogClearedRule
 from modules.correlation.rules.usb_connection import USBConnectionRule
 from modules.correlation.rules.browser_activity import BrowserActivityRule
 from modules.correlation.rules.browser_download_execution import BrowserDownloadExecutionRule
+from modules.correlation.rules.powershell_execution import PowerShellExecutionRule
 from modules.utils.json_export import export_json
 from dataclasses import asdict
 import json
@@ -105,6 +106,7 @@ correlation_engine = CorrelationEngine(
         USBConnectionRule(),
         BrowserActivityRule(),
         BrowserDownloadExecutionRule(),
+        PowerShellExecutionRule(),
     ]
 )
 
