@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 
+from modules.correlation.graph import UnionFind
 from modules.correlation.models import Entity
 from modules.models.entity_type import EntityType
 from modules.models.identity_key import IdentityKey
@@ -24,8 +25,8 @@ class EntityResolver:
 
         self.entity_id_by_event: dict[str, str] = {}
 
-        # Union-Find parent table
-        self._parent: dict[str, str] = {}
+        # Union-Find structure, delegated to the generic implementation
+        self._union_find: UnionFind[str] = UnionFind()
 
         # Reverse mapping: entity -> events
         self._entity_events: dict[str, set[str]] = {}
@@ -174,18 +175,7 @@ class EntityResolver:
         nearly constant time.
         """
 
-        root = entity_id
-
-        while self._parent[root] != root:
-            root = self._parent[root]
-
-        # Path compression
-        while self._parent[entity_id] != root:
-            parent = self._parent[entity_id]
-            self._parent[entity_id] = root
-            entity_id = parent
-
-        return root
+        return self._union_find.find(entity_id)
     
     def _union(self, entity_a: str, entity_b: str) -> str:
         """
@@ -195,16 +185,10 @@ class EntityResolver:
         reproducible forensic results.
         """
 
-        root_a = self._find(entity_a)
-        root_b = self._find(entity_b)
+        survivor, absorbed = self._union_find.union(entity_a, entity_b)
 
-        if root_a == root_b:
-            return root_a
-
-        # Deterministic survivor
-        survivor, absorbed = sorted([root_a, root_b])
-
-        self._parent[absorbed] = survivor
+        if survivor == absorbed:
+            return survivor
 
         survivor_entity = self._entities[survivor]
         absorbed_entity = self._entities.pop(absorbed)
@@ -321,7 +305,7 @@ class EntityResolver:
             )
 
             self._entities[entity_id] = entity
-            self._parent[entity_id] = entity_id
+            self._union_find.make_set(entity_id)
             self._entity_events.setdefault(entity_id, set())
 
             return entity_id
