@@ -31,7 +31,10 @@ either module depending on the other.
 
 from __future__ import annotations
 
+import json
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 
 from modules.llm.incident_analysis_prompt_builder import IncidentAnalysisPromptBuilder
@@ -129,8 +132,10 @@ class IncidentAnalysisAgent:
     def __init__(
         self,
         prompt_builder: IncidentAnalysisPromptBuilder | None = None,
-        model_name: str = "qwen-local",
+        model_name: str = "qwen2.5:14b",
         temperature: float = 0.0,
+        ollama_host: str = "http://localhost:11434",
+        timeout_seconds: float = 300.0,
     ):
         """
         `prompt_builder` defaults to a new IncidentAnalysisPromptBuilder.
@@ -148,6 +153,8 @@ class IncidentAnalysisAgent:
         self._prompt_builder = prompt_builder or IncidentAnalysisPromptBuilder()
         self._model_name = model_name
         self._temperature = temperature
+        self._ollama_host = ollama_host
+        self._timeout_seconds = timeout_seconds
 
     def analyze(
         self,
@@ -297,21 +304,10 @@ class IncidentAnalysisAgent:
             token_count=None,
         )
 
-    @staticmethod
-    def _call_model(prompt: str) -> str:
+    def _call_model(self, prompt: str) -> str:
         """
         Send `prompt` to the local model backend and return its raw
         text response, unmodified.
-
-        PLACEHOLDER: real model communication (Ollama, llama.cpp, or
-        otherwise) is intentionally NOT implemented in this PR, for
-        the same reason QwenValidator._call_model is a placeholder
-        today -- no local Qwen client currently exists in this
-        codebase to reuse. This method is the single, isolated seam
-        where that integration will be added later, so swapping
-        backends only ever means changing the body of this one
-        method -- nothing else in IncidentAnalysisAgent depends on how
-        the model is actually reached.
 
         Any failure while communicating with the model (connection
         failure, timeout, backend or inference exception) must raise
@@ -319,19 +315,61 @@ class IncidentAnalysisAgent:
         callers always know analysis did not complete.
         """
 
+        payload = json.dumps(
+            {
+                "model": self._model_name,
+                "prompt": prompt,
+                "temperature": self._temperature,
+                "stream": False,
+            }
+        ).encode("utf-8")
+
+        request = urllib.request.Request(
+            f"{self._ollama_host}/api/generate",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
         try:
-            # Temporary mock implementation.
-            # This method will later call the local Qwen backend
-            # through Ollama, mirroring QwenValidator._call_model.
-            return (
-                "Placeholder response: no model backend is connected yet. "
-                "This mock exists only to exercise the "
-                "IncidentAnalysisAgent.analyze() orchestration path end "
-                "to end. The real Qwen/Ollama call will replace this "
-                "method body without changing analyze()'s signature or "
-                "behavior."
-            )
+            with urllib.request.urlopen(
+                request, timeout=self._timeout_seconds
+            ) as response:
+                raw_body = response.read()
+        except urllib.error.URLError as error:
+              body = error.read().decode("utf-8", errors="replace")
+              raise IncidentAnalysisModelError(
+                    f"HTTP {error.code}\n\n{body}"
+                ) from error
+
+        except urllib.error.URLError as error:
+            raise IncidentAnalysisModelError(
+                f"Could not reach Ollama at {self._ollama_host}: {error}"
+            ) from error
+
+
+        
         except Exception as error:
             raise IncidentAnalysisModelError(
-                f"Local model backend failed to produce a response: {error}"
+                f"Failed during request to Ollama: {error}"
             ) from error
+
+        try:
+            parsed = json.loads(raw_body)
+        except json.JSONDecodeError as error:
+            raise IncidentAnalysisModelError(
+                f"Ollama returned a non-JSON response: {error}"
+            ) from error
+
+        if "error" in parsed:
+            raise IncidentAnalysisModelError(
+                f"Ollama returned an error for model '{self._model_name}': "
+                f"{parsed['error']} (is it pulled? try `ollama pull {self._model_name}`)"
+            )
+
+        if "response" not in parsed:
+            raise IncidentAnalysisModelError(
+                f"Ollama response is missing the 'response' field: {parsed!r}"
+            )
+
+        return parsed["response"]
