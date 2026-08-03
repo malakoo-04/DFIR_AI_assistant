@@ -78,14 +78,24 @@ class IncidentSerializer:
 
         Any correlation_id not found in `by_id` is skipped rather
         than raising, since serialization should not fail an entire
-        incident over a single missing lookup.
+        incident over a single missing lookup. Duplicate IDs are
+        also collapsed to a single payload here as a second line of
+        defense -- upstream (IncidentCandidateBuilder) is expected to
+        hand this method an already-deduplicated list, but this
+        method's own output contract ("every correlation serialized
+        once") should hold regardless of what it is given, since a
+        JSON payload -- and the LLM prompt built from it -- should
+        never contain the same correlation object rendered twice.
         """
 
-        correlations = [
-            self._serialize_correlation(by_id[correlation_id])
-            for correlation_id in correlation_ids
-            if correlation_id in by_id
-        ]
+        seen: set[str] = set()
+        correlations: list[dict] = []
+
+        for correlation_id in correlation_ids:
+            if correlation_id in seen or correlation_id not in by_id:
+                continue
+            seen.add(correlation_id)
+            correlations.append(self._serialize_correlation(by_id[correlation_id]))
 
         return sorted(correlations, key=lambda payload: payload["correlation_id"])
 

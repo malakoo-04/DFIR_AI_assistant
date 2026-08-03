@@ -154,6 +154,7 @@ class EVTXNormalizer(BaseNormalizer):
             },
             source_file=record.get("source_path"),
             raw_data=record,
+            record_id=record.get("record_id"),
         )
         event["command_line"] = record.get("command_line")
         event["script_name"] = record.get("script_name")

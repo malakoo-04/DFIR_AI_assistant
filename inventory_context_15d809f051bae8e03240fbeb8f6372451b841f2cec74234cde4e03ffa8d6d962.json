@@ -1,0 +1,307 @@
+[
+    {
+        "category": "binary",
+        "count": 66,
+        "artifacts": [
+            {
+                "name": "$Max",
+                "path": "input\\KAPE_OUTPUT\\C\\$Extend\\$Max",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "binary"
+            },
+            {
+                "name": "$Secure_$SDS",
+                "path": "input\\KAPE_OUTPUT\\C\\$Secure_$SDS",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "binary"
+            },
+            {
+                "name": "Capture d’écran 2025-03-17 111329.png",
+                "path": "input\\KAPE_OUTPUT\\Capture d’écran 2025-03-17 111329.png",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "binary"
+            }
+        ]
+    },
+    {
+        "category": "csv",
+        "count": 2,
+        "artifacts": [
+            {
+                "name": "2025-03-07T11_05_53_4099455_CopyLog.csv",
+                "path": "input\\KAPE_OUTPUT\\2025-03-07T11_05_53_4099455_CopyLog.csv",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "csv",
+                "columns": [
+                    "﻿CopiedTimestamp",
+                    "SourceFile",
+                    "DestinationFile",
+                    "FileSize",
+                    "SourceFileSha1",
+                    "DeferredCopy"
+                ],
+                "preview_rows": [
+                    [
+                        "2025-03-07 11:06:17.4281663",
+                        "C:\\Windows\\System32\\winevt\\Logs\\Microsoft-Windows-Windows Defender%4Operational.evtx",
+                        "Z:\\KAPE_OUTPUT\\C\\Windows\\System32\\winevt\\Logs\\Microsoft-Windows-Windows Defender%4Operational.evtx",
+                        "69632",
+                        "B3D7766203281E41FED06A7FE11A6F4A7219A147",
+                        "False",
+                        "2024-05-02 17:49:21.7035841",
+                        "2024-05-02 11:48:44.9878255",
+                        "2024-05-02 11:48:44.9878255",
+                        "00:00:00.0111362"
+                    ],
+                    [
+                        "2025-03-07 11:06:17.5032112",
+                        "C:\\ProgramData\\Microsoft\\Windows Defender\\Support\\MPDetection-20240502-104921.log",
+                        "Z:\\KAPE_OUTPUT\\C\\ProgramData\\Microsoft\\Windows Defender\\Support\\MPDetection-20240502-104921.log",
+                        "592",
+                        "BD0A1C70E44CA81556B858352C1FB37531580970",
+                        "False",
+                        "2024-05-02 17:49:21.0783216",
+                        "2024-05-02 11:52:33.2862469",
+                        "2024-05-02 11:52:33.2862469",
+                        "00:00:00.0071339"
+                    ]
+                ],
+                "encoding": "utf-8"
+            },
+            {
+                "name": "2025-03-07T11_05_53_4099455_SkipLog.csv.csv",
+                "path": "input\\KAPE_OUTPUT\\2025-03-07T11_05_53_4099455_SkipLog.csv.csv",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "csv",
+                "columns": [
+                    "﻿SourceFile",
+                    "SourceFileSha1",
+                    "Reason"
+                ],
+                "preview_rows": [
+                    [
+                        "C:\\Windows\\System32\\winevt\\logs\\Microsoft-AppV-Client%4Operational.evtx",
+                        "B5A6155E744701D266AF0D26A128AF58B146DF8C",
+                        "Deduped"
+                    ],
+                    [
+                        "C:\\Windows\\System32\\winevt\\logs\\Microsoft-AppV-Client%4Virtual Applications.evtx",
+                        "B5A6155E744701D266AF0D26A128AF58B146DF8C",
+                        "Deduped"
+                    ]
+                ],
+                "encoding": "utf-8"
+            }
+        ]
+    },
+    {
+        "category": "json",
+        "count": 1,
+        "artifacts": [
+            {
+                "name": "extensions.json",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\user-1.AD-SERVER0\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\z6hwl890.default-release\\extensions.json",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "json",
+                "preview": "{\"schemaVersion\":35,\"addons\":[{\"id\":\"formautofill@mozilla.org\",\"syncGUID\":\"{61269867-b004-4ab5-a69e-adc598d2e8aa}\",\"version\":\"1.0.1\",\"type\":\"extension",
+                "preview_truncated": true,
+                "json_valid": true,
+                "json_type": "object",
+                "top_level_keys": [
+                    "addons",
+                    "schemaVersion"
+                ]
+            }
+        ]
+    },
+    {
+        "category": "log",
+        "count": 68,
+        "artifacts": [
+            {
+                "name": "2025-03-07T11_05_53_4099455_ConsoleLog.txt",
+                "path": "input\\KAPE_OUTPUT\\2025-03-07T11_05_53_4099455_ConsoleLog.txt",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "log",
+                "preview": "[2025-03-07 11:06:07.5423570 | INF] KAPE directory: C:\\Users\\ahmed\\Desktop\\kape\\KAPE\n[2025-03-07 11:06:07.5423570 | INF] Command line:   --tsource C: ",
+                "preview_truncated": true,
+                "encoding": "utf-8",
+                "lines": 308
+            },
+            {
+                "name": "brndlog.txt",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\user-1.AD-SERVER0\\AppData\\Local\\Microsoft\\Internet Explorer\\brndlog.txt",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "log",
+                "preview": "05/02/2024 04:43:38 Checking for existence of Branding Active Setup stub...\n05/02/2024 04:43:38 InternetExplorerBrandGUID didn't exist: Branding compo",
+                "preview_truncated": true,
+                "encoding": "utf-8",
+                "lines": 142
+            },
+            {
+                "name": "ie4uinit-ClearIconCache.log",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\user-1.AD-SERVER0\\AppData\\Local\\Microsoft\\Internet Explorer\\ie4uinit-ClearIconCache.log",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "log",
+                "preview": "05/02/2024:04:43:38: Starting ie4uinit.exe. Command Line:-ClearIconCache\n05/02/2024:04:43:38: Executing Command: -ClearIconCache\n05/02/2024:04:43:38: ",
+                "preview_truncated": true,
+                "encoding": "utf-16",
+                "lines": 8
+            }
+        ]
+    },
+    {
+        "category": "sqlite",
+        "count": 23,
+        "artifacts": [
+            {
+                "name": "cookies.sqlite",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\user-1.AD-SERVER0\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\z6hwl890.default-release\\cookies.sqlite",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "sqlite",
+                "tables": [
+                    "moz_cookies"
+                ]
+            },
+            {
+                "name": "favicons.sqlite",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\user-1.AD-SERVER0\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\z6hwl890.default-release\\favicons.sqlite",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "sqlite",
+                "tables": [
+                    "moz_icons",
+                    "moz_icons_to_pages",
+                    "moz_pages_w_icons",
+                    "sqlite_stat1"
+                ]
+            },
+            {
+                "name": "key4.db",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\user-1.AD-SERVER0\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\z6hwl890.default-release\\key4.db",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "sqlite",
+                "tables": [
+                    "metaData",
+                    "nssPrivate"
+                ]
+            }
+        ]
+    },
+    {
+        "category": "text",
+        "count": 20,
+        "artifacts": [
+            {
+                "name": "cookies.sqlite-wal",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\user-1.AD-SERVER0\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\z6hwl890.default-release\\cookies.sqlite-wal",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "text",
+                "preview": "",
+                "preview_truncated": false,
+                "encoding": "utf-8",
+                "lines": 0
+            },
+            {
+                "name": "favicons.sqlite-wal",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\user-1.AD-SERVER0\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\z6hwl890.default-release\\favicons.sqlite-wal",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "text",
+                "preview": "",
+                "preview_truncated": false,
+                "encoding": "utf-8",
+                "lines": 0
+            },
+            {
+                "name": "prefs.js",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\user-1.AD-SERVER0\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles\\z6hwl890.default-release\\prefs.js",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "text",
+                "preview": "// Mozilla User Preferences\n\n// DO NOT EDIT THIS FILE.\n//\n// If you make changes to this file while the application is running,\n// the changes will be",
+                "preview_truncated": true,
+                "encoding": "utf-8",
+                "lines": 94
+            }
+        ]
+    },
+    {
+        "category": "xml",
+        "count": 1,
+        "artifacts": [
+            {
+                "name": "iecompatdata.xml",
+                "path": "input\\KAPE_OUTPUT\\C\\Users\\Administrator\\AppData\\Local\\Microsoft\\Internet Explorer\\IECompatData\\iecompatdata.xml",
+                "size": null,
+                "created": null,
+                "modified": null,
+                "accessed": null,
+                "description": null,
+                "category": "xml",
+                "preview": "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\r\n<iecompatlistdescription xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\r\n                         xsi:",
+                "preview_truncated": true,
+                "encoding": "utf-8",
+                "xml_valid": true,
+                "root_tag": "{http://microsoft.com/IE/IECompatData}iecompatlistdescription"
+            }
+        ]
+    }
+]

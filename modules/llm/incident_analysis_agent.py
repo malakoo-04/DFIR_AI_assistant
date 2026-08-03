@@ -8,9 +8,9 @@ the local Qwen model. It performs no reasoning of its own:
             v
     IncidentAnalysisPromptBuilder
             v
-    IncidentAnalysisAgent          <- this module
+    IncidentAnalysisAgent         <- this module
             v
-    IncidentAnalysisResult         <- implemented later, elsewhere
+    IncidentAnalysisResult        <- implemented later, elsewhere
 
 ``IncidentAnalysisAgent`` builds the prompt, sends it to the model, and
 returns an ``LLMResponse`` wrapping the model's raw text completely
@@ -42,119 +42,82 @@ from modules.llm.incident_analysis_prompt_builder import IncidentAnalysisPromptB
 
 @dataclass(slots=True, frozen=True)
 class LLMResponse:
-    """
-    The complete result of one call to the local model.
-
-    ``text`` is exactly what analyze() is required to return: the
-    model's raw response, completely unmodified -- no parsing, no JSON
-    extraction, no regex, no cleanup. Every other field is metadata
-    *about* that call, not about its content: nothing here is derived
-    by reasoning about what the model said, so none of it crosses the
-    "Python performs no forensic reasoning" line.
-
-    This metadata exists because later stages (IncidentAnalysisResult,
-    logging, auditing, cost/latency tracking) need more than the bare
-    string -- and recovering `prompt`, `model_name`, or `duration`
-    after the fact, once only `text` was kept, is not possible.
-
-    `token_count` is the one exception: it is left `None` until a real
-    backend can report it, rather than filled with any kind of
-    approximation. See its field comment below for why.
-    """
+    """The complete result of one call to the local model."""
 
     text: str
     prompt: str
     model_name: str
     temperature: float
     duration_seconds: float
-    # Left as None until a real backend is wired into `_call_model` and
-    # can report actual token usage. Deliberately NOT a word-count or
-    # any other approximation: an estimate that looks like a
-    # measurement is worse than an honest "unknown" in a forensic
-    # tool -- it invites a report to print a wrong number with no
-    # indication that it's wrong.
     token_count: int | None = None
 
 
 class IncidentAnalysisError(Exception):
-    """
-    Base class for every error raised by IncidentAnalysisAgent.
-
-    Never raised directly -- callers should catch this to handle any
-    failure of the analyze() pipeline without needing to know which
-    stage (input validation, prompt construction, or model call)
-    failed.
-    """
+    """Base class for every error raised by IncidentAnalysisAgent."""
 
 
 class IncidentAnalysisInputError(IncidentAnalysisError):
-    """
-    Raised when the caller-supplied incident, timeline, or inventory
-    context is not of the expected shape.
-
-    This is not raised for legitimately empty evidence (an incident
-    with an empty timeline or no inventory context is a normal,
-    supported input -- IncidentAnalysisPromptBuilder already handles
-    that gracefully). It is raised only when an argument is not the
-    expected type at all, since letting that reach the prompt builder
-    would fail with a confusing, unrelated error deeper in the call
-    stack.
-    """
+    """Raised when the input context is not of the expected shape."""
 
 
 class IncidentAnalysisPromptError(IncidentAnalysisError):
-    """
-    Raised when IncidentAnalysisPromptBuilder fails to build a prompt
-    from otherwise well-typed inputs.
-    """
+    """Raised when IncidentAnalysisPromptBuilder fails to build a prompt."""
 
 
 class IncidentAnalysisModelError(IncidentAnalysisError):
-    """
-    Raised when the local model backend fails to produce a response
-    (connection failure, timeout, backend/inference exception, or any
-    other failure while communicating with the model).
-    """
+    """Raised when the local model backend fails to produce a response."""
 
 
 class IncidentAnalysisAgent:
-    """
-    Send a deterministic incident-analysis prompt to the local model
-    and return its raw response, wrapped with call metadata.
+    """Send a deterministic incident-analysis prompt to the local model
 
-    This class only orchestrates Evidence -> Prompt -> Model response.
-    It does not decide what incident occurred, does not compute
-    confidence, does not extract JSON or IOCs, and does not touch any
-    incident, timeline, or inventory data beyond passing it to
-    IncidentAnalysisPromptBuilder unchanged.
+    and return its raw response, wrapped with call metadata.
     """
 
     def __init__(
         self,
         prompt_builder: IncidentAnalysisPromptBuilder | None = None,
-        model_name: str = "qwen2.5:14b",
+        model_name: str = "qwen2.5:7b",
         temperature: float = 0.0,
         ollama_host: str = "http://localhost:11434",
-        timeout_seconds: float = 300.0,
+        timeout_seconds: float = 180.0,
+        keep_alive: str | int = "30m",
     ):
-        """
-        `prompt_builder` defaults to a new IncidentAnalysisPromptBuilder.
-        Accepting one as a constructor argument keeps this class
-        testable (a caller can inject a fake builder) without adding
-        any behavior beyond what the default already provides.
+        """Parameters
 
-        `model_name` and `temperature` are recorded on every
-        LLMResponse this agent produces, and -- once a real backend
-        replaces the placeholder in `_call_model` -- are the values
-        that will actually be passed to that backend. They are plain
-        configuration, never forensic logic.
+        ----------
+        timeout_seconds:
+            Since the fix below, this is an **idle timeout**: the
+            maximum gap allowed between two consecutive pieces of
+            streamed output, not a ceiling on total call duration.
+            Previously (``stream: false``, a single blocking read of
+            the full response) this was a total-duration cap, and a
+            slow-but-working CPU generation could exceed it even
+            though nothing was actually stuck -- that's what was
+            timing out despite `ollama run` succeeding on the exact
+            same prompt. 180s of *silence* is a reasonable "something
+            is actually wrong" signal; 180s of *total* generation time
+            for a 14B CPU model on a real prompt is not. If you still
+            see timeouts after this change, that's a real stall (or a
+            genuinely dead Ollama), not slow-but-alive generation --
+            worth raising, not just raising the number again.
+        keep_alive:
+            Forwarded to Ollama as-is (duration string like "30m", a
+            number of seconds, or -1 to never unload). Ollama's own
+            default is 5 minutes; if the deterministic Python stages
+            between two incidents in a batch run ever take longer
+            than that, the model gets unloaded and the next call pays
+            a full reload (multi-minute, on a CPU-hosted 14B model)
+            before it can even start generating. 30 minutes comfortably
+            survives normal per-incident processing gaps without
+            keeping the model loaded forever after the batch ends.
         """
-
         self._prompt_builder = prompt_builder or IncidentAnalysisPromptBuilder()
         self._model_name = model_name
         self._temperature = temperature
         self._ollama_host = ollama_host
         self._timeout_seconds = timeout_seconds
+        self._keep_alive = keep_alive
 
     def analyze(
         self,
@@ -162,44 +125,7 @@ class IncidentAnalysisAgent:
         timeline: list[dict],
         inventory_context: list[dict],
     ) -> LLMResponse:
-        """
-        Build the incident-analysis prompt and return the model's
-        response.
-
-        Parameters
-        ----------
-        serialized_incident:
-            One incident payload as produced by
-            ``IncidentSerializer.serialize()``.
-        timeline:
-            The forensic timeline as produced by
-            ``TimelineBuilder.build()``. May be empty.
-        inventory_context:
-            Artifacts not parsed into normalized events (KAPE
-            summary/console/copy/skip logs, unsupported or
-            metadata-only artifacts, etc.). May be empty.
-
-        Returns
-        -------
-        An LLMResponse whose `text` field is the model's response
-        exactly as generated -- no parsing, no JSON extraction, no
-        regex, no cleanup. Interpreting `text` is the responsibility
-        of a later stage (IncidentAnalysisResult), not of this
-        method. The remaining fields (`prompt`, `model_name`,
-        `temperature`, `duration_seconds`, `token_count`) are metadata
-        about the call, kept so later stages and logging don't have
-        to reconstruct it after the fact.
-
-        Raises
-        ------
-        IncidentAnalysisInputError:
-            If an argument is not of the expected type.
-        IncidentAnalysisPromptError:
-            If prompt construction fails.
-        IncidentAnalysisModelError:
-            If the model backend fails to produce a response.
-        """
-
+        """Build the incident-analysis prompt and return the model's response."""
         self._validate_inputs(serialized_incident, timeline, inventory_context)
 
         prompt = self._build_prompt(serialized_incident, timeline, inventory_context)
@@ -216,15 +142,6 @@ class IncidentAnalysisAgent:
         timeline: list[dict],
         inventory_context: list[dict],
     ) -> None:
-        """
-        Reject malformed inputs before they reach the prompt builder.
-
-        An empty dict/list is valid (an incident may legitimately have
-        no timeline events or no inventory artifacts yet); the wrong
-        *type* is not, since IncidentAnalysisPromptBuilder's contract
-        is plain dicts and lists of plain dicts.
-        """
-
         if not isinstance(serialized_incident, dict):
             raise IncidentAnalysisInputError(
                 "serialized_incident must be a dict, got "
@@ -252,15 +169,6 @@ class IncidentAnalysisAgent:
         timeline: list[dict],
         inventory_context: list[dict],
     ) -> str:
-        """
-        Delegate prompt construction to IncidentAnalysisPromptBuilder.
-
-        Any failure here is wrapped in IncidentAnalysisPromptError so
-        callers can distinguish "prompt construction failed" from
-        "the model backend failed" without inspecting exception
-        internals.
-        """
-
         try:
             return self._prompt_builder.build(
                 serialized_incident, timeline, inventory_context
@@ -277,19 +185,9 @@ class IncidentAnalysisAgent:
     # ------------------------------------------------------------------
 
     def _execute_model(self, prompt: str) -> LLMResponse:
-        """
-        Run the model backend via `_call_model` and wrap its raw
-        response in an LLMResponse, timing the call and recording
-        this agent's configured `model_name`/`temperature` alongside
-        it.
-
-        This method never inspects, interprets, or reasons about
-        `text` -- it only measures how long producing it took and
-        records what was asked for. All actual model communication
-        stays inside `_call_model`; `token_count` is left `None`
-        here rather than approximated, since only the real backend
-        (once wired in) can report an actual token count.
-        """
+        """Dump `prompt` to `prompt.txt` before invoking the model backend."""
+        with open("prompt.txt", "w", encoding="utf-8") as file:
+            file.write(prompt)
 
         start = time.perf_counter()
         text = self._call_model(prompt)
@@ -305,22 +203,15 @@ class IncidentAnalysisAgent:
         )
 
     def _call_model(self, prompt: str) -> str:
-        """
-        Send `prompt` to the local model backend and return its raw
-        text response, unmodified.
-
-        Any failure while communicating with the model (connection
-        failure, timeout, backend or inference exception) must raise
-        IncidentAnalysisModelError rather than being swallowed, so
-        callers always know analysis did not complete.
-        """
-
         payload = json.dumps(
             {
                 "model": self._model_name,
                 "prompt": prompt,
-                "temperature": self._temperature,
-                "stream": False,
+                "stream": True,
+                "keep_alive": self._keep_alive,
+                "options": {
+                    "temperature": self._temperature,
+                },
             }
         ).encode("utf-8")
 
@@ -335,41 +226,72 @@ class IncidentAnalysisAgent:
             with urllib.request.urlopen(
                 request, timeout=self._timeout_seconds
             ) as response:
-                raw_body = response.read()
-        except urllib.error.URLError as error:
-              body = error.read().decode("utf-8", errors="replace")
-              raise IncidentAnalysisModelError(
-                    f"HTTP {error.code}\n\n{body}"
-                ) from error
-
+                return self._consume_stream(response)
+        except urllib.error.HTTPError as error:
+            body = error.read().decode("utf-8", errors="replace")
+            raise IncidentAnalysisModelError(
+                f"HTTP {error.code}\n\n{body}"
+            ) from error
         except urllib.error.URLError as error:
             raise IncidentAnalysisModelError(
                 f"Could not reach Ollama at {self._ollama_host}: {error}"
             ) from error
-
-
-        
+        except TimeoutError as error:
+            raise IncidentAnalysisModelError(
+                f"Ollama produced no new output for over "
+                f"{self._timeout_seconds:.0f}s (idle timeout, not a total "
+                f"call-duration timeout) -- the model may be stuck or the "
+                f"Ollama process may have died mid-generation: {error}"
+            ) from error
         except Exception as error:
             raise IncidentAnalysisModelError(
                 f"Failed during request to Ollama: {error}"
             ) from error
 
-        try:
-            parsed = json.loads(raw_body)
-        except json.JSONDecodeError as error:
-            raise IncidentAnalysisModelError(
-                f"Ollama returned a non-JSON response: {error}"
-            ) from error
+    def _consume_stream(self, response) -> str:
+        """Accumulate Ollama's newline-delimited JSON stream into the
 
-        if "error" in parsed:
+        final response text.
+
+        Each line is one JSON object, typically carrying a fragment of
+        the response in ``"response"``; the final line carries
+        ``"done": true``. Because this reads the socket line by line
+        rather than waiting for one single complete response body, the
+        ``timeout`` passed to ``urlopen`` above behaves as an idle
+        timeout -- it only fires if no new line arrives within that
+        window, regardless of how long the overall generation takes.
+        """
+        chunks: list[str] = []
+        saw_done = False
+
+        for raw_line in response:
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line:
+                continue
+
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise IncidentAnalysisModelError(
+                    f"Ollama streamed a non-JSON line: {error}"
+                ) from error
+
+            if "error" in parsed:
+                raise IncidentAnalysisModelError(
+                    f"Ollama returned an error for model '{self._model_name}': "
+                    f"{parsed['error']} (is it pulled? try `ollama pull {self._model_name}`)"
+                )
+
+            chunks.append(parsed.get("response", ""))
+
+            if parsed.get("done"):
+                saw_done = True
+                break
+
+        if not saw_done:
             raise IncidentAnalysisModelError(
-                f"Ollama returned an error for model '{self._model_name}': "
-                f"{parsed['error']} (is it pulled? try `ollama pull {self._model_name}`)"
+                "Ollama's stream ended without a final done=true message -- "
+                "the connection was likely closed early."
             )
 
-        if "response" not in parsed:
-            raise IncidentAnalysisModelError(
-                f"Ollama response is missing the 'response' field: {parsed!r}"
-            )
-
-        return parsed["response"]
+        return "".join(chunks)

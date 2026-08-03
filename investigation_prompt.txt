@@ -1,0 +1,1840 @@
+# SYSTEM
+
+You are the Investigation Analysis Agent in a Digital Forensics
+and Incident Response (DFIR) pipeline. A deterministic forensic
+engine has already parsed, normalized, correlated, and grouped
+the entire investigation into incidents from Windows forensic
+artifacts (registry, EVTX, PowerShell logs, prefetch, browser
+history, USN journal, MFT, scheduled tasks, and related
+sources).
+
+This investigation produced 815 incidents. EVERY
+one of them is represented below -- none are omitted. 116 incidents that carry real multi-signal
+evidence are given in full detail; the rest are represented as
+individual one-line summaries, or, for genuine single-
+correlation noise, as counts aggregated by rule (see INCIDENT
+INDEX for exactly how each incident is represented).
+
+Your task is to analyze the INVESTIGATION AS A WHOLE, not each
+incident independently: reconstruct the chronological attack
+chain, identify the principal incident/attack family, and
+produce ONE final DFIR report for this machine.
+
+You must:
+- Reason only from the evidence supplied below.
+- Never invent evidence, fields, artifacts, or events that are
+  not present in this prompt.
+- Treat incidents listed only as one-line summaries as lower-
+  resolution evidence: use them to see patterns and volume,
+  but do not assert specific technical claims about them that
+  their summary line does not support.
+- Treat INVENTORY CONTEXT strictly as supplementary, low-
+  confidence context that must never override validated
+  incident evidence.
+- If the evidence is insufficient or too ambiguous to support
+  a reliable conclusion, say so explicitly instead of
+  guessing.
+
+# INVESTIGATION OVERVIEW
+
+Total incidents: 815
+Total timeline events (whole investigation): 359795
+Overall time span: 2005-06-23T21:48:00 -> 2025-03-07T11:00:37.441958
+
+Incidents by severity: low=716, high=98, medium=1
+
+Incidents by rule (an incident may involve multiple rules):
+  - registry_persistence: 658
+  - powershell_execution: 98
+  - browser_activity: 27
+  - scheduled_task_persistence: 20
+  - service_installation: 12
+  - event_log_cleared: 1
+  - browser_download_execution: 1
+
+# TIMELINE DIGEST
+
+Event volume by (artifact_type, event_type) across the whole
+investigation -- for chronological/volume context only;
+the actual events for high-priority incidents are in
+their own evidence sections below.
+
+  - mft / EventType.TIMESTAMP_INCONSISTENCY: 108579
+  - mft / EventType.FILE_CREATION: 95906
+  - evtx / EventType.UNKNOWN_EVENT: 52355
+  - mft / EventType.DIRECTORY_CREATED: 37667
+  - usn / EventType.FILE_CREATION: 32935
+  - usn / EventType.FILE_DELETION: 14793
+  - usn / EventType.FILE_RENAMED: 8201
+  - evtx / EventType.PROCESS_EXECUTION: 2866
+  - evtx / EventType.PROCESS_TERMINATION: 2238
+  - evtx / EventType.POWERSHELL_PIPELINE_EXECUTION: 1388
+  - prefetch / EventType.PROCESS_EXECUTION: 957
+  - amcache / EventType.APPLICATION_INVENTORY: 725
+  - registry / EventType.SERVICE_CREATED: 649
+  - sru / EventType.APPLICATION_RESOURCE_USAGE: 179
+  - registry / EventType.PROCESS_EXECUTION: 106
+  - browser / EventType.URL_VISIT: 66
+  - sru / EventType.APPLICATION_NETWORK_USAGE: 59
+  - jumplist / EventType.JUMPLIST_REFERENCE: 35
+  - lnk / EventType.SHORTCUT_REFERENCE: 24
+  - scheduled_task / EventType.PERSISTENCE: 20
+  - registry / EventType.PERSISTENCE: 18
+  - evtx / EventType.SERVICE_INSTALL: 12
+  - registry / EventType.DOCUMENT_OPENED: 10
+  - mft / EventType.FILE_DELETION: 3
+  - sru / EventType.NETWORK_CONNECTIVITY: 2
+  - evtx / EventType.LOG_CLEARED: 1
+  - browser / EventType.FILE_DOWNLOAD: 1
+
+# INCIDENT INDEX
+
+All 815 incidents, most significant first. Tier 1 incidents have full evidence in DETAILED EVIDENCE below; Tier 2 are summarized here only; Tier 3 (routine, single-correlation noise) is aggregated by rule at the end -- every incident is accounted for in one of these three ways.
+
+## Tier 1 (full evidence below)
+1. [04598313a59d] severity=high confidence=1.0 rules=[event_log_cleared] window=2024-05-02T11:53:36.849133->2024-05-02T11:53:36.849133 correlations=1 events=1
+2. [fdaae4b2f097] severity=high confidence=0.75 rules=[browser_activity, browser_download_execution, powershell_execution] window=2025-03-07T10:51:30.164185->2025-03-07T10:55:44.295649 correlations=21 events=20
+3. [5c861fd32ed3] severity=high confidence=0.75 rules=[powershell_execution] window=2024-05-02T11:58:01.662905->2025-03-07T10:53:43.075981 correlations=3 events=3
+4. [00b02cf43a50] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.954287->2025-03-07T10:54:58.954287 correlations=1 events=1
+5. [0275df967393] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.854528->2025-03-07T10:54:58.854528 correlations=1 events=1
+6. [122e65b73c37] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+7. [1424908aece9] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.954287->2025-03-07T10:54:58.954287 correlations=1 events=1
+8. [143d8bb93f61] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+9. [15d809f051ba] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.011463->2025-03-07T10:54:59.011463 correlations=1 events=1
+10. [196d2df217c1] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+11. [237bc6d734d2] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.011463->2025-03-07T10:54:59.011463 correlations=1 events=1
+12. [26811b6666a5] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.925531->2025-03-07T10:54:58.925531 correlations=1 events=1
+13. [2713391d1fe6] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.911186->2025-03-07T10:54:58.911186 correlations=1 events=1
+14. [272ab30b5826] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.026295->2025-03-07T10:54:59.026295 correlations=1 events=1
+15. [27397a701715] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+16. [2fa446db925d] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+17. [3802bdd16925] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.954287->2025-03-07T10:54:58.954287 correlations=1 events=1
+18. [39c3df1888d0] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+19. [3b58e6aa9aff] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.925531->2025-03-07T10:54:58.925531 correlations=1 events=1
+20. [3ed39d8ce3e2] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.011463->2025-03-07T10:54:59.011463 correlations=1 events=1
+21. [3ef0cbb988af] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.967276->2025-03-07T10:54:58.967276 correlations=1 events=1
+22. [48d6eb3960ca] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+23. [49a108448584] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.724522->2025-03-07T10:54:58.724522 correlations=1 events=1
+24. [4c65388cbd1f] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.978195->2025-03-07T10:54:58.978195 correlations=1 events=1
+25. [5032e03a1968] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.968407->2025-03-07T10:54:58.968407 correlations=1 events=1
+26. [5ac66a4ec54c] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.954287->2025-03-07T10:54:58.954287 correlations=1 events=1
+27. [5c8ca3af447e] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+28. [5e70dbaabffd] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.854528->2025-03-07T10:54:58.854528 correlations=1 events=1
+29. [5f090c193d74] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+30. [5f70a877ca9d] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.839901->2025-03-07T10:54:58.839901 correlations=1 events=1
+31. [5fb64388cec5] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.021793->2025-03-07T10:54:59.021793 correlations=1 events=1
+32. [60c95adca378] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+33. [64b4a63bd4da] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+34. [656acce37686] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+35. [657efde8e996] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.011463->2025-03-07T10:54:59.011463 correlations=1 events=1
+36. [698fb0de69f2] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.925531->2025-03-07T10:54:58.925531 correlations=1 events=1
+37. [6bb022703359] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+38. [6bf12a3e5931] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.011463->2025-03-07T10:54:59.011463 correlations=1 events=1
+39. [7097fa0a471b] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+40. [7549b1c93da3] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+41. [784843768dc6] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.911186->2025-03-07T10:54:58.911186 correlations=1 events=1
+42. [7b2dddefc8b5] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+43. [7cfacac05587] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.925531->2025-03-07T10:54:58.925531 correlations=1 events=1
+44. [7f4faa3ea10e] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.954287->2025-03-07T10:54:58.954287 correlations=1 events=1
+45. [80c4b53858cd] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+46. [81161a4b230a] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.871119->2025-03-07T10:54:58.871119 correlations=1 events=1
+47. [84f3976e2541] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.021793->2025-03-07T10:54:59.021793 correlations=1 events=1
+48. [85ea417196c8] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+49. [882eee6699b1] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+50. [89a0f62fdea6] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+51. [8bc548db699d] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.911186->2025-03-07T10:54:58.911186 correlations=1 events=1
+52. [8e52b3722158] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.897303->2025-03-07T10:54:58.897303 correlations=1 events=1
+53. [8ee8e06150d4] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+54. [932ce2c0290a] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.954287->2025-03-07T10:54:58.954287 correlations=1 events=1
+55. [9825d91ebd1e] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+56. [9851e8c73bfc] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.026295->2025-03-07T10:54:59.026295 correlations=1 events=1
+57. [a00127d0ef3a] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.954287->2025-03-07T10:54:58.954287 correlations=1 events=1
+58. [a0f8b9be8bf7] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+59. [a1560070221b] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.021793->2025-03-07T10:54:59.021793 correlations=1 events=1
+60. [a2466a500cc4] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+61. [a2c785047bd1] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.964445->2025-03-07T10:54:58.964445 correlations=1 events=1
+62. [a373b4c49946] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.968407->2025-03-07T10:54:58.968407 correlations=1 events=1
+63. [a3c43d43ff53] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.978195->2025-03-07T10:54:58.978195 correlations=1 events=1
+64. [a4c80f9b8199] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+65. [a75427bbd30c] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+66. [aa857c5bdab9] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.968407->2025-03-07T10:54:58.968407 correlations=1 events=1
+67. [acb0043473f1] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.954287->2025-03-07T10:54:58.954287 correlations=1 events=1
+68. [ae82504df8d6] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+69. [aec3ce3731e5] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.978195->2025-03-07T10:54:58.978195 correlations=1 events=1
+70. [aef0eca7abb2] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.925531->2025-03-07T10:54:58.925531 correlations=1 events=1
+71. [afda302333d9] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+72. [b1bf8121eb03] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.011463->2025-03-07T10:54:59.011463 correlations=1 events=1
+73. [ba138148bb3f] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.978195->2025-03-07T10:54:58.978195 correlations=1 events=1
+74. [ba4bd2dbab31] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.968407->2025-03-07T10:54:58.968407 correlations=1 events=1
+75. [c14a4691315c] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.925531->2025-03-07T10:54:58.925531 correlations=1 events=1
+76. [c1f8d0c8c4f1] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.968407->2025-03-07T10:54:58.968407 correlations=1 events=1
+77. [c39472f58396] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.647940->2025-03-07T10:54:58.647940 correlations=1 events=1
+78. [ca3933272912] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.025072->2025-03-07T10:54:59.025072 correlations=1 events=1
+79. [cffd580e15fa] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.897303->2025-03-07T10:54:58.897303 correlations=1 events=1
+80. [d095d819c6ef] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.011463->2025-03-07T10:54:59.011463 correlations=1 events=1
+81. [d33492edef0d] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+82. [d42c65ad36e5] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.982645->2025-03-07T10:54:58.982645 correlations=1 events=1
+83. [d4f95b6ba533] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.011463->2025-03-07T10:54:59.011463 correlations=1 events=1
+84. [d6b3fb0f43e6] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.852541->2025-03-07T10:54:58.852541 correlations=1 events=1
+85. [ded07a16b017] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.011463->2025-03-07T10:54:59.011463 correlations=1 events=1
+86. [e4a9d0a7c657] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.021793->2025-03-07T10:54:59.021793 correlations=1 events=1
+87. [e7d24f45f255] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.981255->2025-03-07T10:54:58.981255 correlations=1 events=1
+88. [e8b52eb7908d] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+89. [eaac4bb73778] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.854528->2025-03-07T10:54:58.854528 correlations=1 events=1
+90. [ed5927c1a54b] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:59.025072->2025-03-07T10:54:59.025072 correlations=1 events=1
+91. [ee7d6cf7e16f] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.968407->2025-03-07T10:54:58.968407 correlations=1 events=1
+92. [f01985d9dfd9] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+93. [f3e998436167] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.925531->2025-03-07T10:54:58.925531 correlations=1 events=1
+94. [f4c41d623c7c] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+95. [f5b1f90b24ab] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+96. [f5c91684261a] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.997211->2025-03-07T10:54:58.997211 correlations=1 events=1
+97. [fa5d54e12bee] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.964445->2025-03-07T10:54:58.964445 correlations=1 events=1
+98. [fe89c97b9e2b] severity=high confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:54:58.939869->2025-03-07T10:54:58.939869 correlations=1 events=1
+99. [bed386461f68] severity=medium confidence=0.75 rules=[powershell_execution] window=2025-03-07T10:55:27.259462->2025-03-07T10:55:27.259462 correlations=1 events=1
+100. [100d42b2354a] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-20T19:25:41.540730->2025-02-27T09:26:08.298370 correlations=10 events=10
+101. [539c5a8e8642] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-20T19:25:36.541805->2025-02-20T19:30:13.299918 correlations=10 events=10
+102. [23b47f12c4e0] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-20T19:25:41.540730->2025-02-27T09:26:07.697624 correlations=5 events=5
+103. [236a4f1dd8f0] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-27T09:26:18.182582->2025-02-27T09:26:19.325777 correlations=3 events=3
+104. [7cdd5ea8d383] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-27T09:25:21.424114->2025-02-27T09:25:22.236546 correlations=3 events=3
+105. [bbd1818a3870] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-27T09:25:57.942165->2025-02-27T09:25:58.716013 correlations=3 events=3
+106. [e271ccfe43d8] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-27T09:24:59.159928->2025-02-27T09:25:03.876951 correlations=3 events=3
+107. [e615c6bd13c2] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-27T09:26:13.896005->2025-02-27T09:26:14.725631 correlations=3 events=3
+108. [38f002b8ff63] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-20T19:25:36.541805->2025-02-20T19:30:03.212109 correlations=2 events=2
+109. [5b0adeedf5d3] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-27T09:26:20.748058->2025-02-27T09:26:22.231995 correlations=2 events=2
+110. [b747ec993459] severity=low confidence=1.0 rules=[browser_activity] window=2025-02-20T19:25:36.541805->2025-02-20T19:30:03.212109 correlations=2 events=2
+111. [c2c2e540e0f7] severity=low confidence=1.0 rules=[browser_activity] window=2024-05-02T11:55:30.981000->2024-05-02T11:55:36.730000 correlations=2 events=2
+112. [00e63da8e678] severity=low confidence=0.95 rules=[registry_persistence] window=2019-12-07T09:15:07.612552->2024-05-02T10:03:59.004014 correlations=5 events=5
+113. [35b29d354c30] severity=low confidence=0.95 rules=[registry_persistence] window=2024-05-02T17:49:14.265530->2024-05-02T18:48:46.975672 correlations=3 events=3
+114. [284e390ea0ee] severity=low confidence=0.95 rules=[registry_persistence] window=2024-05-02T17:49:11.994258->2024-05-02T17:49:11.994258 correlations=2 events=2
+115. [7bb02db9b0b6] severity=low confidence=0.95 rules=[registry_persistence] window=2025-02-20T19:24:50.376110->2025-02-20T19:24:50.376110 correlations=2 events=2
+116. [9ad99e652ed5] severity=low confidence=0.95 rules=[registry_persistence] window=2019-12-07T09:17:27.101670->2019-12-07T09:17:27.274344 correlations=2 events=2
+
+## Tier 3 -- aggregated (routine, single-correlation noise)
+699 low-severity, single-correlation, single-rule incidents (e.g. routine persistence entries for ordinary Windows services). Every one of them is counted below by rule -- none are excluded from these totals, they are just not expanded individually:
+  - registry_persistence: 653
+  - scheduled_task_persistence: 20
+  - browser_activity: 14
+  - service_installation: 12
+
+# DETAILED EVIDENCE (top-priority incidents)
+
+Full correlation and graph evidence for the highest-priority
+incidents identified above. Reference these by their
+[incident_id prefix] from the INCIDENT INDEX.
+
+## Incident [04598313a59d]
+Time Window: 2024-05-02T11:53:36.849133 -> 2024-05-02T11:53:36.849133
+Severity: high
+Confidence: 1.0
+Rules: event_log_cleared
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [bed4351be1] event_log_cleared severity=high confidence=1.0 time=2024-05-02T11:53:36.849133
+
+### Supporting Correlations
+(none)
+
+## Incident [fdaae4b2f097]
+Time Window: 2025-03-07T10:51:30.164185 -> 2025-03-07T10:55:44.295649
+Severity: high
+Confidence: 0.75
+Rules: browser_activity, browser_download_execution, powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [191fffdd1f] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:53:41.338421
+- [2481bef82f] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:53:41.947618
+- [26725b628f] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:41.372942
+- [272ab4012a] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:42.215731
+- [2e0d40db8b] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:53:42.152496
+- [343a8dbabd] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:42.875492
+- [440d9c2cc3] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:44.295649
+- [4b9cf48fca] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:43.305189
+- [54561dbccf] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:40.168308
+- [608a054381] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:11.138277
+- [6b8d3853cf] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:26.536745
+- [7c6ef1eb64] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:43.119307
+- [91621a1808] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:53:42.335947
+- [a0f25005e9] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:53:42.540901
+- [a130048623] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:43.581211
+- [a93a81694a] browser_download_execution severity=medium confidence=1.0 time=2025-03-07T10:51:30.164185
+- [b46fd99567] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:42.555214
+- [b51b92c8fe] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:53:41.745260
+- [b9106dc6c1] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:41.862732
+- [c7d909671d] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:40.897367
+- [da4a08700e] browser_activity severity=low confidence=1.0 time=2025-03-07T10:51:30.164185
+
+### Supporting Correlations
+(none)
+
+## Incident [5c861fd32ed3]
+Time Window: 2024-05-02T11:58:01.662905 -> 2025-03-07T10:53:43.075981
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [019351ed4b] powershell_execution severity=medium confidence=0.75 time=2024-05-02T11:58:01.662905
+- [a601283e58] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:53:43.075981
+- [ff9a8de23b] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:52:16.937063
+
+### Supporting Correlations
+(none)
+
+## Incident [00b02cf43a50]
+Time Window: 2025-03-07T10:54:58.954287 -> 2025-03-07T10:54:58.954287
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [1e864a9a09] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.954287
+
+### Supporting Correlations
+(none)
+
+## Incident [0275df967393]
+Time Window: 2025-03-07T10:54:58.854528 -> 2025-03-07T10:54:58.854528
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [ee3cbc6a36] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.854528
+
+### Supporting Correlations
+(none)
+
+## Incident [122e65b73c37]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [2cd8305864] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [1424908aece9]
+Time Window: 2025-03-07T10:54:58.954287 -> 2025-03-07T10:54:58.954287
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [e1941f5c75] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.954287
+
+### Supporting Correlations
+(none)
+
+## Incident [143d8bb93f61]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [10b4fc2124] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [15d809f051ba]
+Time Window: 2025-03-07T10:54:59.011463 -> 2025-03-07T10:54:59.011463
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [100c6f1d64] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.011463
+
+### Supporting Correlations
+(none)
+
+## Incident [196d2df217c1]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [acf2e1dbc5] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [237bc6d734d2]
+Time Window: 2025-03-07T10:54:59.011463 -> 2025-03-07T10:54:59.011463
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [7533689f27] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.011463
+
+### Supporting Correlations
+(none)
+
+## Incident [26811b6666a5]
+Time Window: 2025-03-07T10:54:58.925531 -> 2025-03-07T10:54:58.925531
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [927e0281d2] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.925531
+
+### Supporting Correlations
+(none)
+
+## Incident [2713391d1fe6]
+Time Window: 2025-03-07T10:54:58.911186 -> 2025-03-07T10:54:58.911186
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [bd582a9011] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.911186
+
+### Supporting Correlations
+(none)
+
+## Incident [272ab30b5826]
+Time Window: 2025-03-07T10:54:59.026295 -> 2025-03-07T10:54:59.026295
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [9d3ce68f2c] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.026295
+
+### Supporting Correlations
+(none)
+
+## Incident [27397a701715]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [88e49883ed] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [2fa446db925d]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [ebd01c7926] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [3802bdd16925]
+Time Window: 2025-03-07T10:54:58.954287 -> 2025-03-07T10:54:58.954287
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [f97b8566ae] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.954287
+
+### Supporting Correlations
+(none)
+
+## Incident [39c3df1888d0]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [8986878287] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [3b58e6aa9aff]
+Time Window: 2025-03-07T10:54:58.925531 -> 2025-03-07T10:54:58.925531
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [e68b6915e4] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.925531
+
+### Supporting Correlations
+(none)
+
+## Incident [3ed39d8ce3e2]
+Time Window: 2025-03-07T10:54:59.011463 -> 2025-03-07T10:54:59.011463
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [875872003a] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.011463
+
+### Supporting Correlations
+(none)
+
+## Incident [3ef0cbb988af]
+Time Window: 2025-03-07T10:54:58.967276 -> 2025-03-07T10:54:58.967276
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [99ba8f703c] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.967276
+
+### Supporting Correlations
+(none)
+
+## Incident [48d6eb3960ca]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [1625601a3b] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [49a108448584]
+Time Window: 2025-03-07T10:54:58.724522 -> 2025-03-07T10:54:58.724522
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [1a6f71f86b] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.724522
+
+### Supporting Correlations
+(none)
+
+## Incident [4c65388cbd1f]
+Time Window: 2025-03-07T10:54:58.978195 -> 2025-03-07T10:54:58.978195
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [b7ff941949] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.978195
+
+### Supporting Correlations
+(none)
+
+## Incident [5032e03a1968]
+Time Window: 2025-03-07T10:54:58.968407 -> 2025-03-07T10:54:58.968407
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [16718b0253] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.968407
+
+### Supporting Correlations
+(none)
+
+## Incident [5ac66a4ec54c]
+Time Window: 2025-03-07T10:54:58.954287 -> 2025-03-07T10:54:58.954287
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [f7d193c0b4] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.954287
+
+### Supporting Correlations
+(none)
+
+## Incident [5c8ca3af447e]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [512884cd2b] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [5e70dbaabffd]
+Time Window: 2025-03-07T10:54:58.854528 -> 2025-03-07T10:54:58.854528
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [223ab44193] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.854528
+
+### Supporting Correlations
+(none)
+
+## Incident [5f090c193d74]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [5684d4621b] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [5f70a877ca9d]
+Time Window: 2025-03-07T10:54:58.839901 -> 2025-03-07T10:54:58.839901
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [38171b655b] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.839901
+
+### Supporting Correlations
+(none)
+
+## Incident [5fb64388cec5]
+Time Window: 2025-03-07T10:54:59.021793 -> 2025-03-07T10:54:59.021793
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [25384e80d0] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.021793
+
+### Supporting Correlations
+(none)
+
+## Incident [60c95adca378]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [0d4a45da97] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [64b4a63bd4da]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [db9d450221] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [656acce37686]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [e037335673] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [657efde8e996]
+Time Window: 2025-03-07T10:54:59.011463 -> 2025-03-07T10:54:59.011463
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [b02916d34b] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.011463
+
+### Supporting Correlations
+(none)
+
+## Incident [698fb0de69f2]
+Time Window: 2025-03-07T10:54:58.925531 -> 2025-03-07T10:54:58.925531
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [7ef58eb90c] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.925531
+
+### Supporting Correlations
+(none)
+
+## Incident [6bb022703359]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [17939d958a] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [6bf12a3e5931]
+Time Window: 2025-03-07T10:54:59.011463 -> 2025-03-07T10:54:59.011463
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [b060251ccf] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.011463
+
+### Supporting Correlations
+(none)
+
+## Incident [7097fa0a471b]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [48baa16ac5] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [7549b1c93da3]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [3319c658ba] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [784843768dc6]
+Time Window: 2025-03-07T10:54:58.911186 -> 2025-03-07T10:54:58.911186
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [9f38ce4a2d] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.911186
+
+### Supporting Correlations
+(none)
+
+## Incident [7b2dddefc8b5]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [ccd40dfeb6] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [7cfacac05587]
+Time Window: 2025-03-07T10:54:58.925531 -> 2025-03-07T10:54:58.925531
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [1e92bbd3e1] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.925531
+
+### Supporting Correlations
+(none)
+
+## Incident [7f4faa3ea10e]
+Time Window: 2025-03-07T10:54:58.954287 -> 2025-03-07T10:54:58.954287
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [ca719d2879] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.954287
+
+### Supporting Correlations
+(none)
+
+## Incident [80c4b53858cd]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [d0f66dc887] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [81161a4b230a]
+Time Window: 2025-03-07T10:54:58.871119 -> 2025-03-07T10:54:58.871119
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [b60993f9e8] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.871119
+
+### Supporting Correlations
+(none)
+
+## Incident [84f3976e2541]
+Time Window: 2025-03-07T10:54:59.021793 -> 2025-03-07T10:54:59.021793
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [4d060bde5a] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.021793
+
+### Supporting Correlations
+(none)
+
+## Incident [85ea417196c8]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [3e9da9381e] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [882eee6699b1]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [78009cee06] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [89a0f62fdea6]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [de9d6d157a] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [8bc548db699d]
+Time Window: 2025-03-07T10:54:58.911186 -> 2025-03-07T10:54:58.911186
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [e7e1c56c21] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.911186
+
+### Supporting Correlations
+(none)
+
+## Incident [8e52b3722158]
+Time Window: 2025-03-07T10:54:58.897303 -> 2025-03-07T10:54:58.897303
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [e794ef65d6] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.897303
+
+### Supporting Correlations
+(none)
+
+## Incident [8ee8e06150d4]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [41c4d2b754] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [932ce2c0290a]
+Time Window: 2025-03-07T10:54:58.954287 -> 2025-03-07T10:54:58.954287
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [6b2c871add] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.954287
+
+### Supporting Correlations
+(none)
+
+## Incident [9825d91ebd1e]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [031d749fab] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [9851e8c73bfc]
+Time Window: 2025-03-07T10:54:59.026295 -> 2025-03-07T10:54:59.026295
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [7fa1497290] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.026295
+
+### Supporting Correlations
+(none)
+
+## Incident [a00127d0ef3a]
+Time Window: 2025-03-07T10:54:58.954287 -> 2025-03-07T10:54:58.954287
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [a47c6c518e] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.954287
+
+### Supporting Correlations
+(none)
+
+## Incident [a0f8b9be8bf7]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [b1fa84dd80] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [a1560070221b]
+Time Window: 2025-03-07T10:54:59.021793 -> 2025-03-07T10:54:59.021793
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [f00830b2dc] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.021793
+
+### Supporting Correlations
+(none)
+
+## Incident [a2466a500cc4]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [19c92f61cc] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [a2c785047bd1]
+Time Window: 2025-03-07T10:54:58.964445 -> 2025-03-07T10:54:58.964445
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [eb7d135f84] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.964445
+
+### Supporting Correlations
+(none)
+
+## Incident [a373b4c49946]
+Time Window: 2025-03-07T10:54:58.968407 -> 2025-03-07T10:54:58.968407
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [6cf8ac21a5] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.968407
+
+### Supporting Correlations
+(none)
+
+## Incident [a3c43d43ff53]
+Time Window: 2025-03-07T10:54:58.978195 -> 2025-03-07T10:54:58.978195
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [28a94a8144] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.978195
+
+### Supporting Correlations
+(none)
+
+## Incident [a4c80f9b8199]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [8213602780] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [a75427bbd30c]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [d90448f7a0] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [aa857c5bdab9]
+Time Window: 2025-03-07T10:54:58.968407 -> 2025-03-07T10:54:58.968407
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [bc5a74f56c] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.968407
+
+### Supporting Correlations
+(none)
+
+## Incident [acb0043473f1]
+Time Window: 2025-03-07T10:54:58.954287 -> 2025-03-07T10:54:58.954287
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [3e6001d7c3] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.954287
+
+### Supporting Correlations
+(none)
+
+## Incident [ae82504df8d6]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [3800458ace] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [aec3ce3731e5]
+Time Window: 2025-03-07T10:54:58.978195 -> 2025-03-07T10:54:58.978195
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [a7bbb0b062] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.978195
+
+### Supporting Correlations
+(none)
+
+## Incident [aef0eca7abb2]
+Time Window: 2025-03-07T10:54:58.925531 -> 2025-03-07T10:54:58.925531
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [22340d0ec7] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.925531
+
+### Supporting Correlations
+(none)
+
+## Incident [afda302333d9]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [834331090e] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [b1bf8121eb03]
+Time Window: 2025-03-07T10:54:59.011463 -> 2025-03-07T10:54:59.011463
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [dbda7f77d0] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.011463
+
+### Supporting Correlations
+(none)
+
+## Incident [ba138148bb3f]
+Time Window: 2025-03-07T10:54:58.978195 -> 2025-03-07T10:54:58.978195
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [19e18e01c9] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.978195
+
+### Supporting Correlations
+(none)
+
+## Incident [ba4bd2dbab31]
+Time Window: 2025-03-07T10:54:58.968407 -> 2025-03-07T10:54:58.968407
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [2754d51ed5] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.968407
+
+### Supporting Correlations
+(none)
+
+## Incident [c14a4691315c]
+Time Window: 2025-03-07T10:54:58.925531 -> 2025-03-07T10:54:58.925531
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [f639c76848] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.925531
+
+### Supporting Correlations
+(none)
+
+## Incident [c1f8d0c8c4f1]
+Time Window: 2025-03-07T10:54:58.968407 -> 2025-03-07T10:54:58.968407
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [241fbbb2d6] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.968407
+
+### Supporting Correlations
+(none)
+
+## Incident [c39472f58396]
+Time Window: 2025-03-07T10:54:58.647940 -> 2025-03-07T10:54:58.647940
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [8a19a94cba] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.647940
+
+### Supporting Correlations
+(none)
+
+## Incident [ca3933272912]
+Time Window: 2025-03-07T10:54:59.025072 -> 2025-03-07T10:54:59.025072
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [bcf8b60b6f] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.025072
+
+### Supporting Correlations
+(none)
+
+## Incident [cffd580e15fa]
+Time Window: 2025-03-07T10:54:58.897303 -> 2025-03-07T10:54:58.897303
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [901044f13e] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.897303
+
+### Supporting Correlations
+(none)
+
+## Incident [d095d819c6ef]
+Time Window: 2025-03-07T10:54:59.011463 -> 2025-03-07T10:54:59.011463
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [4d64ec6b6d] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.011463
+
+### Supporting Correlations
+(none)
+
+## Incident [d33492edef0d]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [777c336b57] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [d42c65ad36e5]
+Time Window: 2025-03-07T10:54:58.982645 -> 2025-03-07T10:54:58.982645
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [9a71766ace] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.982645
+
+### Supporting Correlations
+(none)
+
+## Incident [d4f95b6ba533]
+Time Window: 2025-03-07T10:54:59.011463 -> 2025-03-07T10:54:59.011463
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [ac9ea699cd] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.011463
+
+### Supporting Correlations
+(none)
+
+## Incident [d6b3fb0f43e6]
+Time Window: 2025-03-07T10:54:58.852541 -> 2025-03-07T10:54:58.852541
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [c22124de8c] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.852541
+
+### Supporting Correlations
+(none)
+
+## Incident [ded07a16b017]
+Time Window: 2025-03-07T10:54:59.011463 -> 2025-03-07T10:54:59.011463
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [1c2d8b4912] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.011463
+
+### Supporting Correlations
+(none)
+
+## Incident [e4a9d0a7c657]
+Time Window: 2025-03-07T10:54:59.021793 -> 2025-03-07T10:54:59.021793
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [dbf0481db3] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.021793
+
+### Supporting Correlations
+(none)
+
+## Incident [e7d24f45f255]
+Time Window: 2025-03-07T10:54:58.981255 -> 2025-03-07T10:54:58.981255
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [4ed0799a27] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.981255
+
+### Supporting Correlations
+(none)
+
+## Incident [e8b52eb7908d]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [95a78fffd1] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [eaac4bb73778]
+Time Window: 2025-03-07T10:54:58.854528 -> 2025-03-07T10:54:58.854528
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [c091e77cd4] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.854528
+
+### Supporting Correlations
+(none)
+
+## Incident [ed5927c1a54b]
+Time Window: 2025-03-07T10:54:59.025072 -> 2025-03-07T10:54:59.025072
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [795b93e631] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:59.025072
+
+### Supporting Correlations
+(none)
+
+## Incident [ee7d6cf7e16f]
+Time Window: 2025-03-07T10:54:58.968407 -> 2025-03-07T10:54:58.968407
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [8bad3fba45] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.968407
+
+### Supporting Correlations
+(none)
+
+## Incident [f01985d9dfd9]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [438c6de49c] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [f3e998436167]
+Time Window: 2025-03-07T10:54:58.925531 -> 2025-03-07T10:54:58.925531
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [83aecedcc5] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.925531
+
+### Supporting Correlations
+(none)
+
+## Incident [f4c41d623c7c]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [001212b790] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [f5b1f90b24ab]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [2f38fe6cd9] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [f5c91684261a]
+Time Window: 2025-03-07T10:54:58.997211 -> 2025-03-07T10:54:58.997211
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [5c1b74261b] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.997211
+
+### Supporting Correlations
+(none)
+
+## Incident [fa5d54e12bee]
+Time Window: 2025-03-07T10:54:58.964445 -> 2025-03-07T10:54:58.964445
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [90ae09cde0] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.964445
+
+### Supporting Correlations
+(none)
+
+## Incident [fe89c97b9e2b]
+Time Window: 2025-03-07T10:54:58.939869 -> 2025-03-07T10:54:58.939869
+Severity: high
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [0363a2c230] powershell_execution severity=high confidence=0.75 time=2025-03-07T10:54:58.939869
+
+### Supporting Correlations
+(none)
+
+## Incident [bed386461f68]
+Time Window: 2025-03-07T10:55:27.259462 -> 2025-03-07T10:55:27.259462
+Severity: medium
+Confidence: 0.75
+Rules: powershell_execution
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [01028dfc65] powershell_execution severity=medium confidence=0.75 time=2025-03-07T10:55:27.259462
+
+### Supporting Correlations
+(none)
+
+## Incident [100d42b2354a]
+Time Window: 2025-02-20T19:25:41.540730 -> 2025-02-27T09:26:08.298370
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [0f796dbd3e] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:42.578363
+- [2d6bfcac8a] browser_activity severity=low confidence=1.0 time=2025-02-27T09:24:51.666754
+- [3c965b8fad] browser_activity severity=low confidence=1.0 time=2025-02-27T09:24:51.216818
+- [46bbb55049] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:07.697624
+- [845cd3027a] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:04.252686
+- [8ff951ba2b] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:11.149871
+- [9de9a5e672] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:10.651521
+- [a2cbc7b14a] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:41.540730
+- [b3ff77fbb9] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:03.748193
+- [e5813230a9] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:08.298370
+
+### Supporting Correlations
+(none)
+
+## Incident [539c5a8e8642]
+Time Window: 2025-02-20T19:25:36.541805 -> 2025-02-20T19:30:13.299918
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [4385a597cb] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:36.912137
+- [48698fee30] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:04.566830
+- [63b427982d] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:37.286596
+- [8749b2ac87] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:05.395362
+- [9d2b1b5b43] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:13.299918
+- [ad46cdcbfa] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:03.212109
+- [cc7691fd27] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:05.561746
+- [db7131db60] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:37.389990
+- [e57c7c0dd5] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:36.541805
+- [f1f8bc5345] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:40.561119
+
+### Supporting Correlations
+(none)
+
+## Incident [23b47f12c4e0]
+Time Window: 2025-02-20T19:25:41.540730 -> 2025-02-27T09:26:07.697624
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [3ec361fe12] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:10.651521
+- [a7680f6558] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:03.748193
+- [ad5711aa35] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:41.540730
+- [fd1d7068af] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:07.697624
+- [fe844d0d4a] browser_activity severity=low confidence=1.0 time=2025-02-27T09:24:51.216818
+
+### Supporting Correlations
+(none)
+
+## Incident [236a4f1dd8f0]
+Time Window: 2025-02-27T09:26:18.182582 -> 2025-02-27T09:26:19.325777
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [0d33d80b88] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:19.325777
+- [13b010a685] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:18.214284
+- [a7d424eb1f] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:18.182582
+
+### Supporting Correlations
+(none)
+
+## Incident [7cdd5ea8d383]
+Time Window: 2025-02-27T09:25:21.424114 -> 2025-02-27T09:25:22.236546
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [9581f1d05a] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:22.236546
+- [9f9c11e65f] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:21.475745
+- [bbf27c71d3] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:21.424114
+
+### Supporting Correlations
+(none)
+
+## Incident [bbd1818a3870]
+Time Window: 2025-02-27T09:25:57.942165 -> 2025-02-27T09:25:58.716013
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [877b2f0f50] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:57.942165
+- [8ab75f4d6b] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:57.973377
+- [ea80c6cfb4] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:58.716013
+
+### Supporting Correlations
+(none)
+
+## Incident [e271ccfe43d8]
+Time Window: 2025-02-27T09:24:59.159928 -> 2025-02-27T09:25:03.876951
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [5dad2718f8] browser_activity severity=low confidence=1.0 time=2025-02-27T09:24:59.159928
+- [5f516ce355] browser_activity severity=low confidence=1.0 time=2025-02-27T09:25:03.876951
+- [baef1fbcdd] browser_activity severity=low confidence=1.0 time=2025-02-27T09:24:59.219302
+
+### Supporting Correlations
+(none)
+
+## Incident [e615c6bd13c2]
+Time Window: 2025-02-27T09:26:13.896005 -> 2025-02-27T09:26:14.725631
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [a2719a6da5] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:14.725631
+- [f609b988e8] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:13.896005
+- [fed5c4a39b] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:13.948943
+
+### Supporting Correlations
+(none)
+
+## Incident [38f002b8ff63]
+Time Window: 2025-02-20T19:25:36.541805 -> 2025-02-20T19:30:03.212109
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [5579289fb0] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:36.541805
+- [d25ca4d759] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:03.212109
+
+### Supporting Correlations
+(none)
+
+## Incident [5b0adeedf5d3]
+Time Window: 2025-02-27T09:26:20.748058 -> 2025-02-27T09:26:22.231995
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [3b1ac01107] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:20.748058
+- [c55ab9c372] browser_activity severity=low confidence=1.0 time=2025-02-27T09:26:22.231995
+
+### Supporting Correlations
+(none)
+
+## Incident [b747ec993459]
+Time Window: 2025-02-20T19:25:36.541805 -> 2025-02-20T19:30:03.212109
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [e5c50b9aa5] browser_activity severity=low confidence=1.0 time=2025-02-20T19:25:36.541805
+- [f2e296d754] browser_activity severity=low confidence=1.0 time=2025-02-20T19:30:03.212109
+
+### Supporting Correlations
+(none)
+
+## Incident [c2c2e540e0f7]
+Time Window: 2024-05-02T11:55:30.981000 -> 2024-05-02T11:55:36.730000
+Severity: low
+Confidence: 1.0
+Rules: browser_activity
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [bcf399a0a6] browser_activity severity=low confidence=1.0 time=2024-05-02T11:55:30.981000
+- [f109788de3] browser_activity severity=low confidence=1.0 time=2024-05-02T11:55:36.730000
+
+### Supporting Correlations
+(none)
+
+## Incident [00e63da8e678]
+Time Window: 2019-12-07T09:15:07.612552 -> 2024-05-02T10:03:59.004014
+Severity: low
+Confidence: 0.95
+Rules: registry_persistence
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [75409f5329] registry_persistence severity=low confidence=0.95 time=2019-12-07T09:16:04.912132
+- [8b1909486b] registry_persistence severity=low confidence=0.95 time=2024-05-02T10:03:59.004014
+- [c030faa65a] registry_persistence severity=low confidence=0.95 time=2019-12-07T09:16:04.912132
+- [c407319b4e] registry_persistence severity=low confidence=0.95 time=2019-12-07T09:15:07.612552
+- [ebfcd27850] registry_persistence severity=low confidence=0.95 time=2019-12-07T09:15:07.659456
+
+### Supporting Correlations
+(none)
+
+## Incident [35b29d354c30]
+Time Window: 2024-05-02T17:49:14.265530 -> 2024-05-02T18:48:46.975672
+Severity: low
+Confidence: 0.95
+Rules: registry_persistence
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [3654b90384] registry_persistence severity=low confidence=0.95 time=2024-05-02T17:49:14.265530
+- [7055bb398d] registry_persistence severity=low confidence=0.95 time=2024-05-02T18:48:46.975672
+- [ed8c35b64d] registry_persistence severity=low confidence=0.95 time=2024-05-02T17:49:14.578150
+
+### Supporting Correlations
+(none)
+
+## Incident [284e390ea0ee]
+Time Window: 2024-05-02T17:49:11.994258 -> 2024-05-02T17:49:11.994258
+Severity: low
+Confidence: 0.95
+Rules: registry_persistence
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [122ccff696] registry_persistence severity=low confidence=0.95 time=2024-05-02T17:49:11.994258
+- [b1d5761e0b] registry_persistence severity=low confidence=0.95 time=2024-05-02T17:49:11.994258
+
+### Supporting Correlations
+(none)
+
+## Incident [7bb02db9b0b6]
+Time Window: 2025-02-20T19:24:50.376110 -> 2025-02-20T19:24:50.376110
+Severity: low
+Confidence: 0.95
+Rules: registry_persistence
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [3692b110f3] registry_persistence severity=low confidence=0.95 time=2025-02-20T19:24:50.376110
+- [45b9ada3fe] registry_persistence severity=low confidence=0.95 time=2025-02-20T19:24:50.376110
+
+### Supporting Correlations
+(none)
+
+## Incident [9ad99e652ed5]
+Time Window: 2019-12-07T09:17:27.101670 -> 2019-12-07T09:17:27.274344
+Severity: low
+Confidence: 0.95
+Rules: registry_persistence
+Related Incident IDs: (none)
+
+### Primary Correlations
+- [140479078c] registry_persistence severity=low confidence=0.95 time=2019-12-07T09:17:27.274344
+- [8cbb400a86] registry_persistence severity=low confidence=0.95 time=2019-12-07T09:17:27.101670
+
+### Supporting Correlations
+(none)
+
+# INVENTORY CONTEXT
+
+Artifacts discovered but not parsed into normalized events
+(deduplicated once for the whole investigation). Supplementary
+and low-confidence -- never overrides incident evidence.
+
+- None (None): None
+- None (None): None
+- None (None): None
+- None (None): None
+- None (None): None
+- None (None): None
+- None (None): None
+- None (None): None
+
+# TASK
+
+Using only the evidence supplied above, produce ONE final DFIR
+report answering, in order:
+
+1. What happened on this machine? Reconstruct the chronological
+   sequence of events across the WHOLE investigation, not one
+   incident at a time.
+2. What is the complete attack chain (initial access,
+   execution, persistence, defense evasion, impact, etc.),
+   citing which incidents/correlations (by ID) support each
+   stage?
+3. What is the principal incident, and what incident type /
+   attack family does it belong to (ransomware, credential
+   theft, brute force, persistence-only, etc.)? If more than
+   one is plausible, list each candidate with supporting
+   evidence.
+4. Which of the other incidents are part of the same attack,
+   versus unrelated/background activity (e.g. routine
+   persistence noise)?
+5. What is your overall confidence in this reconstruction, and
+   what specific uncertainty or gaps remain?
+6. If the supplied evidence is insufficient to support a
+   reliable conclusion, say so explicitly instead of guessing.
+7. Never invent evidence; base every conclusion only on the
+   information supplied above.

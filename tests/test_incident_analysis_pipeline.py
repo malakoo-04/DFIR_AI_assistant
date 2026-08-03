@@ -44,6 +44,7 @@ from modules.correlation.engine import CorrelationEngine
 from modules.correlation.incident_builder import IncidentCandidateBuilder
 from modules.correlation.incident_enricher import IncidentEnricher
 from modules.correlation.incident_graph import IncidentGraphBuilder
+from modules.correlation.incident_prioritizer import IncidentPrioritizer
 from modules.correlation.incident_serializer import IncidentSerializer
 from modules.correlation.incident_timeline_extractor import IncidentTimelineExtractor
 from modules.correlation.rules.browser_activity import BrowserActivityRule
@@ -63,6 +64,7 @@ from modules.llm.incident_analysis_agent import (
     IncidentAnalysisAgent,
     IncidentAnalysisError,
 )
+from modules.llm.incident_analysis_prompt_builder import IncidentAnalysisPromptBuilder
 from modules.normalizer.normalizer import Normalizer
 from modules.parsers.parser_manager import ParserManager
 from modules.timeline.builder import TimelineBuilder
@@ -187,7 +189,27 @@ def main() -> None:
         return
 
     # ------------------------------------------------------------
+    # INCIDENT PRIORITIZATION (processing order only -- does not
+    # change serialized_incidents itself, which stays in the
+    # IncidentSerializer's stable hash order for export/audit)
+    # ------------------------------------------------------------
+    try:
+        prioritized_incidents = IncidentPrioritizer().prioritize(serialized_incidents)
+    except Exception as error:
+        _fail("Incident Prioritizer", error)
+        return
+
+    # ------------------------------------------------------------
     # INVENTORY CONTEXT
+    #
+    # Only extraction happens here -- it doesn't depend on any one
+    # incident. The actual InventoryContextBuilder.build() call now
+    # happens per-incident, inside the loop below, scoped to that
+    # incident's own time_window. Building it once here and reusing
+    # the same object for every incident was the reason a ransom
+    # note (or any other unrelated artifact) showed up identically
+    # in every one of 575 incidents' prompts regardless of whether
+    # it had anything to do with that incident.
     # ------------------------------------------------------------
     try:
         extractor = InventoryContextExtractor()
@@ -198,9 +220,9 @@ def main() -> None:
             extractor.extract(artifact) for artifact in unparsed_recognized_artifacts
         ]
 
-        inventory_context = InventoryContextBuilder().build(extracted)
+        inventory_builder = InventoryContextBuilder()
     except Exception as error:
-        _fail("Inventory Context (Extractor/Builder)", error)
+        _fail("Inventory Context (Extractor)", error)
         return
 
     # ------------------------------------------------------------
@@ -237,6 +259,26 @@ def main() -> None:
         )
         return
 
+    _section("INCIDENT PROCESSING ORDER (prioritized)")
+    print(
+        "Order below is by severity, then confidence, then correlation "
+        "count, then event count -- NOT the incident_id hash order used "
+        "for export.\n"
+    )
+    for rank, incident in enumerate(prioritized_incidents[:10], start=1):
+        correlation_count = len(incident.get("primary_correlations") or []) + len(
+            incident.get("supporting_correlations") or []
+        )
+        print(
+            f"{rank:>2}. {incident.get('incident_id')[:12]}...  "
+            f"severity={incident.get('severity'):<8} "
+            f"confidence={incident.get('confidence'):<6} "
+            f"correlations={correlation_count:<4} "
+            f"events={len(incident.get('events') or [])}"
+        )
+    if len(prioritized_incidents) > 10:
+        print(f"... and {len(prioritized_incidents) - 10} more")
+
     # ------------------------------------------------------------
     # LLM ANALYSIS -- real model, every incident, no mocking
     # ------------------------------------------------------------
@@ -248,7 +290,7 @@ def main() -> None:
 
     timeline_extractor = IncidentTimelineExtractor()
 
-    for serialized_incident in serialized_incidents:
+    for serialized_incident in prioritized_incidents:
         incident_id = serialized_incident.get("incident_id")
 
         try:
@@ -257,6 +299,32 @@ def main() -> None:
             )
         except Exception as error:
             _fail(f"Incident Timeline Extractor (incident {incident_id})", error)
+            return
+
+        try:
+            incident_time_window = (
+                serialized_incident.get("time_window", {}).get("start"),
+                serialized_incident.get("time_window", {}).get("end"),
+            )
+            inventory_context = inventory_builder.build(
+                extracted,
+            )
+
+            with open(
+                    f"inventory_context_{incident_id}.json",
+                    "w",
+                    encoding="utf-8",
+                ) as f:
+                    json.dump(
+                        inventory_context,
+                        f,
+                        indent=4,
+                        ensure_ascii=False,
+                        default=str,
+                    )
+
+        except Exception as error:
+            _fail(f"Inventory Context Builder (incident {incident_id})", error)
             return
 
         # ------------------------------------------------------------
@@ -283,35 +351,46 @@ def main() -> None:
 
         # ------------------------------------------------------------
         # STEP 1: PROMPT SECTION INSTRUMENTATION
+        #
+        # Uses IncidentAnalysisPromptBuilder's real section methods
+        # directly (_build_system/_build_validated_incident/
+        # _build_timeline/_build_inventory_context/_build_task) rather
+        # than guessing at attribute names via getattr(..., default) --
+        # the previous version of this block checked for a
+        # `prompt_builder` attribute that doesn't exist (the agent
+        # stores it as `_prompt_builder`) and called method names
+        # (`_build_incident_section`, `_build_timeline_section`,
+        # `_build_inventory_section`) that were never real methods on
+        # this class, so every getattr() fell through to its default
+        # and silently printed "0 chars" for every section regardless
+        # of the actual prompt size.
         # ------------------------------------------------------------
         try:
-            # Extract section contents if available via builder helpers
-            if hasattr(agent, "prompt_builder"):
-                builder = agent.prompt_builder
-                system_prompt = getattr(builder, "system_prompt", "")
-                incident_section = getattr(builder, "_build_incident_section", lambda x: "")(serialized_incident)
-                timeline_section = getattr(builder, "_build_timeline_section", lambda x: "")(incident_timeline)
-                inventory_section = getattr(builder, "_build_inventory_section", lambda x: "")(inventory_context)
-                task_section = getattr(builder, "task_section", "")
+            prompt_builder_cls = IncidentAnalysisPromptBuilder
+            system_section = prompt_builder_cls._build_system()
+            incident_section = prompt_builder_cls._build_validated_incident(serialized_incident)
+            timeline_section = prompt_builder_cls._build_timeline(incident_timeline)
+            inventory_section = prompt_builder_cls._build_inventory_context(inventory_context)
+            task_section = prompt_builder_cls._build_task()
 
-                print("\n" + "=" * 60)
-                print("PROMPT BREAKDOWN")
-                print("=" * 60)
-                print(f"SYSTEM:        {len(system_prompt):>10,} chars")
-                print(f"INCIDENT:      {len(incident_section):>10,} chars")
-                print(f"TIMELINE:      {len(timeline_section):>10,} chars")
-                print(f"INVENTORY:     {len(inventory_section):>10,} chars")
-                print(f"TASK:          {len(task_section):>10,} chars")
-                print("-" * 60)
-                total = (
-                    len(system_prompt)
-                    + len(incident_section)
-                    + len(timeline_section)
-                    + len(inventory_section)
-                    + len(task_section)
-                )
-                print(f"TOTAL:         {total:>10,} chars")
-                print("=" * 60)
+            print("\n" + "=" * 60)
+            print("PROMPT BREAKDOWN")
+            print("=" * 60)
+            print(f"SYSTEM:        {len(system_section):>10,} chars")
+            print(f"INCIDENT:      {len(incident_section):>10,} chars")
+            print(f"TIMELINE:      {len(timeline_section):>10,} chars")
+            print(f"INVENTORY:     {len(inventory_section):>10,} chars")
+            print(f"TASK:          {len(task_section):>10,} chars")
+            print("-" * 60)
+            total = (
+                len(system_section)
+                + len(incident_section)
+                + len(timeline_section)
+                + len(inventory_section)
+                + len(task_section)
+            )
+            print(f"TOTAL:         {total:>10,} chars")
+            print("=" * 60)
 
             prompt = agent._build_prompt(
                 serialized_incident,
@@ -341,11 +420,22 @@ def main() -> None:
             )
 
         try:
-            response = agent.analyze(
-                serialized_incident,
-                incident_timeline,
-                inventory_context,
-            )
+            response = None
+
+            for attempt in range(2):
+                try:
+                    response = agent.analyze(
+                        serialized_incident,
+                        incident_timeline,
+                        inventory_context,
+                    )
+                    break
+
+                except IncidentAnalysisError as error:
+                    print(f"Attempt {attempt + 1} failed: {error}")
+
+                    if attempt == 1:
+                        raise
         except IncidentAnalysisError as error:
             _fail(f"LLM Analysis (incident {incident_id})", error)
             return

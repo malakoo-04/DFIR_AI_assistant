@@ -1,0 +1,354 @@
+# SYSTEM
+
+You are the Incident Analysis Agent in a Digital Forensics and
+Incident Response (DFIR) pipeline. A deterministic forensic
+engine has already parsed, normalized, correlated, and
+validated the incident described below from Windows forensic
+artifacts (registry, EVTX, PowerShell logs, prefetch, browser
+history, USN journal, MFT, scheduled tasks, and related
+sources). Validation is complete -- you are not being asked to
+re-validate or re-group this incident.
+
+Your task is narrower and different: determine the most
+likely incident type (for example ransomware, credential
+theft, brute force, persistence, or another category) using
+only the forensic evidence supplied in this prompt.
+
+You are given three independent kinds of evidence below:
+  1. VALIDATED INCIDENT -- the correlation engine's validated
+     output for this incident.
+  2. FORENSIC TIMELINE -- the deterministic, normalized event
+     timeline covering this incident's time window.
+  3. INVENTORY CONTEXT -- artifacts that were discovered in
+     the collection but could not be parsed into normalized
+     events (for example KAPE summary, console, copy, or skip
+     logs; unsupported artifact types; metadata-only
+     artifacts).
+
+You must:
+- Reason only from the evidence supplied below.
+- Never invent evidence, fields, artifacts, or events that
+  are not present in this prompt.
+- Never assume missing facts: a missing or empty field means
+  the information is unknown to this incident, not that it is
+  absent from the system as a whole.
+- Treat INVENTORY CONTEXT strictly as supplementary,
+  low-confidence context. It consists of artifacts that were
+  never parsed into validated forensic events, so it must
+  never outweigh, override, or be used to contradict the
+  validated evidence in VALIDATED INCIDENT or FORENSIC
+  TIMELINE.
+- If the supplied evidence is insufficient or too ambiguous
+  to support a reliable incident classification, explicitly
+  state that no reliable incident classification can be made
+  -- do not guess an incident type to fill the gap.
+- Clearly distinguish direct observations (what the evidence
+  shows) from your own conclusions (what you infer from it).
+
+# INVENTORY CONTEXT
+
+The artifacts below were discovered during collection but
+were NOT parsed into normalized forensic events (for example
+KAPE summary, console, copy, or skip logs; unsupported
+artifact types; metadata-only artifacts). Previews and
+structural details (columns, table names, encoding, etc.)
+are shown where available, but this is still supplementary
+context only -- it must not be treated as validated evidence
+and must never outweigh VALIDATED INCIDENT or FORENSIC
+TIMELINE above.
+
+## Category: binary (66)
+
+- Name: $Max
+  Path: input\KAPE_OUTPUT\C\$Extend\$Max
+  Category: binary
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+
+- Name: $Secure_$SDS
+  Path: input\KAPE_OUTPUT\C\$Secure_$SDS
+  Category: binary
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+
+- Name: Capture d’écran 2025-03-17 111329.png
+  Path: input\KAPE_OUTPUT\Capture d’écran 2025-03-17 111329.png
+  Category: binary
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+
+## Category: csv (2)
+
+- Name: 2025-03-07T11_05_53_4099455_CopyLog.csv
+  Path: input\KAPE_OUTPUT\2025-03-07T11_05_53_4099455_CopyLog.csv
+  Category: csv
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Encoding: utf-8
+  Columns: ﻿CopiedTimestamp, SourceFile, DestinationFile, FileSize, SourceFileSha1, DeferredCopy
+  Preview Rows (2):
+    - ['2025-03-07 11:06:17.4281663', 'C:\\Windows\\System32\\winevt\\Logs\\Microsoft-Windows-Windows Defender%4Operational.evtx', 'Z:\\KAPE_OUTPUT\\C\\Windows\\System32\\winevt\\Logs\\Microsoft-Windows-Windows Defender%4Operational.evtx', '69632', 'B3D7766203281E41FED06A7FE11A6F4A7219A147', 'False', '2024-05-02 17:49:21.7035841', '2024-05-02 11:48:44.9878255', '2024-05-02 11:48:44.9878255', '00:00:00.0111362']
+    - ['2025-03-07 11:06:17.5032112', 'C:\\ProgramData\\Microsoft\\Windows Defender\\Support\\MPDetection-20240502-104921.log', 'Z:\\KAPE_OUTPUT\\C\\ProgramData\\Microsoft\\Windows Defender\\Support\\MPDetection-20240502-104921.log', '592', 'BD0A1C70E44CA81556B858352C1FB37531580970', 'False', '2024-05-02 17:49:21.0783216', '2024-05-02 11:52:33.2862469', '2024-05-02 11:52:33.2862469', '00:00:00.0071339']
+
+- Name: 2025-03-07T11_05_53_4099455_SkipLog.csv.csv
+  Path: input\KAPE_OUTPUT\2025-03-07T11_05_53_4099455_SkipLog.csv.csv
+  Category: csv
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Encoding: utf-8
+  Columns: ﻿SourceFile, SourceFileSha1, Reason
+  Preview Rows (2):
+    - ['C:\\Windows\\System32\\winevt\\logs\\Microsoft-AppV-Client%4Operational.evtx', 'B5A6155E744701D266AF0D26A128AF58B146DF8C', 'Deduped']
+    - ['C:\\Windows\\System32\\winevt\\logs\\Microsoft-AppV-Client%4Virtual Applications.evtx', 'B5A6155E744701D266AF0D26A128AF58B146DF8C', 'Deduped']
+
+## Category: json (1)
+
+- Name: extensions.json
+  Path: input\KAPE_OUTPUT\C\Users\user-1.AD-SERVER0\AppData\Roaming\Mozilla\Firefox\Profiles\z6hwl890.default-release\extensions.json
+  Category: json
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  JSON Valid: True
+  JSON Type: object
+  Top-Level Keys: addons, schemaVersion
+  Preview (truncated):
+    | {"schemaVersion":35,"addons":[{"id":"formautofill@mozilla.org","syncGUID":"{61269867-b004-4ab5-a69e-adc598d2e8aa}","version":"1.0.1","type":"extension
+
+## Category: log (68)
+
+- Name: 2025-03-07T11_05_53_4099455_ConsoleLog.txt
+  Path: input\KAPE_OUTPUT\2025-03-07T11_05_53_4099455_ConsoleLog.txt
+  Category: log
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Encoding: utf-8
+  Line Count: 308
+  Preview (truncated):
+    | [2025-03-07 11:06:07.5423570 | INF] KAPE directory: C:\Users\ahmed\Desktop\kape\KAPE
+    | [2025-03-07 11:06:07.5423570 | INF] Command line:   --tsource C: 
+
+- Name: brndlog.txt
+  Path: input\KAPE_OUTPUT\C\Users\user-1.AD-SERVER0\AppData\Local\Microsoft\Internet Explorer\brndlog.txt
+  Category: log
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Encoding: utf-8
+  Line Count: 142
+  Preview (truncated):
+    | 05/02/2024 04:43:38 Checking for existence of Branding Active Setup stub...
+    | 05/02/2024 04:43:38 InternetExplorerBrandGUID didn't exist: Branding compo
+
+- Name: ie4uinit-ClearIconCache.log
+  Path: input\KAPE_OUTPUT\C\Users\user-1.AD-SERVER0\AppData\Local\Microsoft\Internet Explorer\ie4uinit-ClearIconCache.log
+  Category: log
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Encoding: utf-16
+  Line Count: 8
+  Preview (truncated):
+    | 05/02/2024:04:43:38: Starting ie4uinit.exe. Command Line:-ClearIconCache
+    | 05/02/2024:04:43:38: Executing Command: -ClearIconCache
+    | 05/02/2024:04:43:38: 
+
+## Category: sqlite (23)
+
+- Name: cookies.sqlite
+  Path: input\KAPE_OUTPUT\C\Users\user-1.AD-SERVER0\AppData\Roaming\Mozilla\Firefox\Profiles\z6hwl890.default-release\cookies.sqlite
+  Category: sqlite
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Tables: moz_cookies
+
+- Name: favicons.sqlite
+  Path: input\KAPE_OUTPUT\C\Users\user-1.AD-SERVER0\AppData\Roaming\Mozilla\Firefox\Profiles\z6hwl890.default-release\favicons.sqlite
+  Category: sqlite
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Tables: moz_icons, moz_icons_to_pages, moz_pages_w_icons, sqlite_stat1
+
+- Name: key4.db
+  Path: input\KAPE_OUTPUT\C\Users\user-1.AD-SERVER0\AppData\Roaming\Mozilla\Firefox\Profiles\z6hwl890.default-release\key4.db
+  Category: sqlite
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Tables: metaData, nssPrivate
+
+## Category: text (20)
+
+- Name: cookies.sqlite-wal
+  Path: input\KAPE_OUTPUT\C\Users\user-1.AD-SERVER0\AppData\Roaming\Mozilla\Firefox\Profiles\z6hwl890.default-release\cookies.sqlite-wal
+  Category: text
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Encoding: utf-8
+  Line Count: 0
+  Preview:
+    | 
+
+- Name: favicons.sqlite-wal
+  Path: input\KAPE_OUTPUT\C\Users\user-1.AD-SERVER0\AppData\Roaming\Mozilla\Firefox\Profiles\z6hwl890.default-release\favicons.sqlite-wal
+  Category: text
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Encoding: utf-8
+  Line Count: 0
+  Preview:
+    | 
+
+- Name: prefs.js
+  Path: input\KAPE_OUTPUT\C\Users\user-1.AD-SERVER0\AppData\Roaming\Mozilla\Firefox\Profiles\z6hwl890.default-release\prefs.js
+  Category: text
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Encoding: utf-8
+  Line Count: 94
+  Preview (truncated):
+    | // Mozilla User Preferences
+    | 
+    | // DO NOT EDIT THIS FILE.
+    | //
+    | // If you make changes to this file while the application is running,
+    | // the changes will be
+
+## Category: xml (1)
+
+- Name: iecompatdata.xml
+  Path: input\KAPE_OUTPUT\C\Users\Administrator\AppData\Local\Microsoft\Internet Explorer\IECompatData\iecompatdata.xml
+  Category: xml
+  Size: None
+  Created: None
+  Modified: None
+  Accessed: None
+  Description: None
+  Encoding: utf-8
+  XML Valid: True
+  Root Tag: {http://microsoft.com/IE/IECompatData}iecompatlistdescription
+  Preview (truncated):
+    | <?xml version="1.0" encoding="utf-8" ?>
+    | <iecompatlistdescription xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    |                          xsi:
+
+# FORENSIC TIMELINE
+
+Events below are listed in the exact order produced by the
+Timeline Builder. Do not reorder, merge, or drop any event.
+
+- Event ID: 7308c650370072b9ac8c250a99d726121e2363b39b427b0ac3ab18d205c86d4b
+  Timestamp: 2025-03-07 10:54:58.925531
+  Artifact Type: evtx
+  Event Type: EventType.POWERSHELL_PIPELINE_EXECUTION
+  Category: EventCategory.EXECUTION
+  Object Name: None
+  Object Path: None
+  Related Objects: (none)
+  User: None
+  Computer: USER-1-PC.AD-SERVER.local
+  Description: PowerShell pipeline execution
+  Confidence: 1.0
+  Source File: input\KAPE_OUTPUT\C\Windows\System32\winevt\Logs\Windows PowerShell.evtx
+  Identity Keys: (none)
+
+# VALIDATED INCIDENT
+
+Incident ID: 26811b6666a5e1af6ec932a88932c877bc33d78fff1185b676617c059013d569
+Time Window: 2025-03-07T10:54:58.925531 -> 2025-03-07T10:54:58.925531
+Severity: high
+Confidence: 0.75
+Rules Involved: powershell_execution
+Entity IDs: (none)
+Event IDs: 7308c650370072b9ac8c250a99d726121e2363b39b427b0ac3ab18d205c86d4b
+Related Incident IDs: (none)
+
+## Primary Correlations
+
+- Correlation ID: 927e0281d2d1ae583af28f5a5e27c37e5afad788e98e01e56fca18f48a6bde20
+  Rule: powershell_execution
+  Severity: high
+  Confidence: 0.75
+  Start Time: 2025-03-07T10:54:58.925531
+  End Time: 2025-03-07T10:54:58.925531
+  Entity IDs: (none)
+  Event IDs: 7308c650370072b9ac8c250a99d726121e2363b39b427b0ac3ab18d205c86d4b
+
+## Supporting Correlations
+
+(none)
+
+## Correlation Graph
+
+(no edges)
+
+# TASK
+
+Using only the evidence supplied above, complete the following
+steps, in order:
+
+0. First, reconstruct -- in your own words, in chronological
+   order -- what happened on the system, using only the
+   supplied evidence. Do not classify the incident yet at
+   this step; simply describe the observed sequence of
+   events as they occurred.
+1. Based on that reconstruction, what is the most likely
+   incident type (for example ransomware, credential theft,
+   brute force, persistence, lateral movement, data
+   exfiltration, etc.)? If more than one type is plausible,
+   list each candidate.
+2. For each candidate incident type, cite the specific
+   correlations and/or timeline events (by ID) that support
+   it.
+3. Does INVENTORY CONTEXT add any relevant supplementary
+   detail? If so, describe it -- but do not let it override
+   or outweigh VALIDATED INCIDENT or FORENSIC TIMELINE.
+4. State your confidence in this classification and explain
+   any uncertainty or ambiguity in the evidence.
+5. If the supplied evidence is insufficient to support any
+   reliable incident classification, say so explicitly
+   instead of guessing.
+6. Never invent evidence.
+7. Base every conclusion only on the information supplied
+   above.

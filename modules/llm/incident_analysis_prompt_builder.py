@@ -71,9 +71,9 @@ class IncidentAnalysisPromptBuilder:
 
         sections = [
             self._build_system(),
-            self._build_validated_incident(serialized_incident),
-            self._build_timeline(timeline or []),
             self._build_inventory_context(inventory_context or []),
+            self._build_timeline(timeline or []),
+            self._build_validated_incident(serialized_incident),
             self._build_task(),
         ]
 

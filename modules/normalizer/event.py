@@ -33,6 +33,7 @@ def _build_event_id(
     source_file,
     object_name,
     object_path,
+    record_id=None,
 ) -> str:
     """
     Build a deterministic identifier for a normalized event.
@@ -48,6 +49,25 @@ def _build_event_id(
 
     because they may change without changing the forensic meaning
     of the event.
+
+    ``record_id`` is different from everything above: where a source
+    format provides one (for example, EVTX's per-record sequence
+    number, unique and monotonically increasing within a single log
+    file), it is the one field that reliably disambiguates two
+    otherwise-identical-looking events. Without it, two distinct EVTX
+    records can hash to the same event_id purely because
+    ``timestamp``/``object_name``/``object_path`` happen to coincide --
+    which is not rare: Windows EVTX timestamps carry 7-digit (100ns)
+    fractional seconds, but ``datetime.fromisoformat`` (used when
+    parsing them) silently truncates the 7th digit rather than
+    rounding, so any two records within the same microsecond collide.
+    High-frequency providers like PowerShell script-block logging can
+    emit hundreds of records inside one truncated microsecond, all
+    sharing the same script (and therefore the same object_path).
+
+    Left as ``None`` for artifact types with no natural per-record
+    identifier (MFT, USN, Prefetch, LNK, browser history, registry,
+    ...), so their event_id is completely unchanged by this parameter.
     """
 
     canonical_timestamp = TimeUtils.coerce_timestamp(timestamp)
@@ -60,6 +80,9 @@ def _build_event_id(
         str(object_name or ""),
         str(object_path or ""),
     ]
+
+    if record_id is not None:
+        parts.append(str(record_id))
 
     canonical = "|".join(parts)
 
@@ -79,6 +102,7 @@ def ensure_event_id(event: dict) -> str:
         source_file=event.get("source_file"),
         object_name=event.get("object_name"),
         object_path=event.get("object_path"),
+        record_id=event.get("record_id"),
     )
     event["event_id"] = event_id
     return event_id
@@ -101,12 +125,19 @@ def create_event(
     source_file=None,
     raw_data=None,
     identity_keys=[],
+    record_id=None,
 ):
     """
     Create a normalized DFIR event.
 
     Every event receives a deterministic event_id built from its
     intrinsic forensic properties.
+
+    ``record_id`` is optional and only meaningful for artifact types
+    whose source format provides a natural, guaranteed-unique
+    per-record identifier (currently: EVTX). See ``_build_event_id``
+    for why this matters. Passing ``None`` (the default) reproduces
+    the previous behavior exactly.
     """
 
     event = {
@@ -125,6 +156,7 @@ def create_event(
         "source_file": source_file,
         "raw_data": raw_data or {},
         "identity_keys": identity_keys or [],
+        "record_id": record_id,
     }
     ensure_event_id(event)
     return event

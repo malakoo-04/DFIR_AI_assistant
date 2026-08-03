@@ -8,6 +8,26 @@ from modules.models.entity_type import EntityType
 from modules.models.identity_key import IdentityKey
 from modules.models.identity_strength import IdentityStrength
 
+
+# Generic, multi-tenant Windows host processes. Dozens of unrelated,
+# legitimate objects (e.g. every "netsvcs" Windows service) legitimately
+# share one of these as their launching/hosting executable. Treating such
+# a value as a WEAK fallback identity key silently fuses all of them into
+# one canonical entity, which then cascades -- via IncidentGraphBuilder's
+# shared_entity criterion -- into one oversized incident containing dozens
+# of unrelated correlations. This is a value-level heuristic (not
+# artifact-type-specific semantics), so it keeps EntityResolver generic.
+_GENERIC_HOST_MARKERS = (
+    "svchost.exe",
+    "rundll32.exe",
+    "dllhost.exe",
+    "wmiprvse.exe",
+    "conhost.exe",
+    "msiexec.exe",
+    "taskhostw.exe",
+)
+
+
 class EntityResolver:
     """
     Resolve normalized events into canonical entities.
@@ -123,23 +143,42 @@ class EntityResolver:
 
         Fallback keys are scoped by artifact type to prevent
         accidental cross-artifact correlations.
+
+        Preference order is object_path, then object_name -- but a
+        candidate value is skipped if it merely names a generic,
+        multi-tenant host process (see ``_GENERIC_HOST_MARKERS``)
+        rather than the object itself. Such a value carries no
+        distinguishing identity: it is shared by design across many
+        unrelated legitimate objects (e.g. every "netsvcs" Windows
+        service is launched via the same svchost.exe command line),
+        so anchoring identity on it manufactures false correlations
+        instead of real ones. Falling through to object_name (or, if
+        that is also generic, to no fallback key at all) keeps this
+        method's contract -- "no fallback key" is safer than "a
+        wrong, over-broad one".
         """
 
-        value = event.get("object_path") or event.get("object_name")
+        for candidate in (event.get("object_path"), event.get("object_name")):
+            if not candidate:
+                continue
 
-        if not value:
-            return []
+            normalized = str(candidate).strip().lower()
 
-        artifact_type = str(event.get("artifact_type") or "unknown")
+            if any(marker in normalized for marker in _GENERIC_HOST_MARKERS):
+                continue
 
-        return [
-            IdentityKey(
-                kind=f"fallback_object:{artifact_type}",
-                value=str(value).strip().lower(),
-                entity_type=EntityType.FILE,
-                strength=IdentityStrength.WEAK,
-            )
-        ]
+            artifact_type = str(event.get("artifact_type") or "unknown")
+
+            return [
+                IdentityKey(
+                    kind=f"fallback_object:{artifact_type}",
+                    value=normalized,
+                    entity_type=EntityType.FILE,
+                    strength=IdentityStrength.WEAK,
+                )
+            ]
+
+        return []
     
     @staticmethod
     def _by_strength(keys: list[IdentityKey]) -> list[IdentityKey]:

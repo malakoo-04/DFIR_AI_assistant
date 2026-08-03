@@ -95,6 +95,21 @@ class IncidentCandidateBuilder:
         existing generic UnionFind. Every correlation becomes a node,
         even one with no edges -- it simply ends up alone in its own
         cluster.
+
+        ``correlations`` is the flat, undeduplicated concatenation of
+        every rule's findings (see ``CorrelationEngine.run()``, which
+        deliberately does not deduplicate across rules). Two distinct
+        ``Correlation`` objects can legitimately share the same
+        ``correlation_id`` -- for example, when a rule computes its ID
+        from ``event_id`` and two source records collide onto the same
+        ``event_id``. Without deduplication here, such a collision
+        would append the same correlation_id into a cluster once per
+        colliding object, which then propagates as repeated, identical
+        entries all the way through to the serialized incident and the
+        LLM prompt. Grouping by connectivity is still driven by every
+        correlation instance (so union-find sees every edge), but each
+        cluster's *membership list* keeps only the first occurrence of
+        a given correlation_id, preserving discovery order.
         """
 
         union_find: UnionFind[str] = UnionFind()
@@ -106,10 +121,18 @@ class IncidentCandidateBuilder:
             union_find.union(edge.source_correlation_id, edge.target_correlation_id)
 
         groups: dict[str, list[str]] = {}
+        seen_in_group: dict[str, set[str]] = {}
 
         for correlation in correlations:
             root = union_find.find(correlation.correlation_id)
-            groups.setdefault(root, []).append(correlation.correlation_id)
+            group = groups.setdefault(root, [])
+            seen = seen_in_group.setdefault(root, set())
+
+            if correlation.correlation_id in seen:
+                continue
+
+            seen.add(correlation.correlation_id)
+            group.append(correlation.correlation_id)
 
         return list(groups.values())
 
