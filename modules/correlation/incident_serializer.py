@@ -102,17 +102,32 @@ class IncidentSerializer:
     def _serialize_correlation(self, correlation: Correlation) -> dict:
         """
         Serialize a single Correlation into a plain dict.
+
+        title/description/evidence/techniques are included deliberately.
+        A prior version of this method omitted them, which meant every
+        consumer downstream of serialization -- including the LLM
+        prompt -- only ever saw a correlation's ID, timing, severity,
+        and confidence, never the actual forensic content (command
+        lines, URLs, file/registry paths, matched indicators, etc.)
+        that explains *why* the correlation fired. Without that
+        content, no amount of prompt engineering downstream can make
+        the model reconstruct an attack chain -- there is nothing to
+        reconstruct it from.
         """
 
         return {
             "correlation_id": correlation.correlation_id,
             "rule_name": correlation.rule_name,
+            "title": correlation.title,
+            "description": correlation.description,
             "start_time": self._iso_time(correlation.start_time),
             "end_time": self._iso_time(correlation.end_time),
             "severity": correlation.severity.value,
             "confidence": correlation.confidence,
             "entity_ids": sorted(correlation.entity_ids),
             "event_ids": sorted(correlation.event_ids),
+            "techniques": sorted(correlation.techniques or []),
+            "evidence": correlation.evidence or {},
         }
 
     def _serialize_graph(self, graph_edges: list[GraphEdge]) -> list[dict]:

@@ -71,6 +71,7 @@ prompt, never whether it is mentioned.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 
@@ -413,28 +414,75 @@ class InvestigationAnalysisPromptBuilder:
             "",
         ]
 
-        for title, key in (
+        for section_title, key in (
             ("Primary Correlations", "primary_correlations"),
             ("Supporting Correlations", "supporting_correlations"),
         ):
             correlations = incident.get(key) or []
-            lines.append(f"### {title}")
+            lines.append(f"### {section_title}")
             if not correlations:
                 lines.append("(none)")
             for correlation in correlations:
                 lines.append(
                     f"- [{correlation.get('correlation_id', '')[:10]}] "
-                    f"{correlation.get('rule_name')} "
+                    f"{correlation.get('rule_name')}: {correlation.get('title') or ''} "
                     f"severity={correlation.get('severity')} "
                     f"confidence={correlation.get('confidence')} "
                     f"time={correlation.get('start_time')}"
                 )
+                description = correlation.get("description")
+                if description:
+                    lines.append(f"    description: {description}")
+                techniques = correlation.get("techniques") or []
+                if techniques:
+                    lines.append(f"    techniques: {', '.join(techniques)}")
                 evidence = correlation.get("evidence") or {}
                 for evidence_key, evidence_value in evidence.items():
-                    lines.append(f"    {evidence_key}: {evidence_value}")
+                    lines.append(
+                        f"    {evidence_key}: {cls._compact_evidence_value(evidence_value)}"
+                    )
             lines.append("")
 
         return "\n".join(lines).rstrip()
+
+    # A run this long of only base64 alphabet characters is virtually
+    # never something an analyst (or the model) needs to read
+    # character-for-character -- it is payload, not forensic narrative.
+    # Redacting it in place (rather than dropping the whole evidence
+    # value) keeps the surrounding command/structure intact, e.g.
+    # "...FromBase64String('<b64:2192 chars>')..." still shows the
+    # technique (Base64-encoded payload passed to a decoder) without
+    # spending ~500+ tokens reproducing the payload itself.
+    _BASE64_RUN = re.compile(r"[A-Za-z0-9+/]{80,}={0,2}")
+
+    # Hard cap on any single evidence value after base64 redaction, so
+    # one unusually verbose field (a long script body, a giant raw
+    # command line, etc.) still cannot dominate the prompt the way one
+    # correlation's evidence did before this fix (measured: up to
+    # ~15,000 characters for a single PowerShell correlation, repeated
+    # across dozens of correlations from the same script).
+    _MAX_EVIDENCE_VALUE_CHARS = 500
+
+    @classmethod
+    def _compact_evidence_value(cls, value):
+        if isinstance(value, dict):
+            return {k: cls._compact_evidence_value(v) for k, v in value.items()}
+
+        if isinstance(value, list):
+            return [cls._compact_evidence_value(v) for v in value]
+
+        if not isinstance(value, str):
+            return value
+
+        redacted = cls._BASE64_RUN.sub(
+            lambda match: f"<base64:{len(match.group(0))} chars omitted>", value
+        )
+
+        if len(redacted) <= cls._MAX_EVIDENCE_VALUE_CHARS:
+            return redacted
+
+        head = redacted[: cls._MAX_EVIDENCE_VALUE_CHARS]
+        return f"{head}... <{len(redacted) - len(head)} more chars truncated>"
 
     # ------------------------------------------------------------------
     # Section -- INVENTORY CONTEXT
