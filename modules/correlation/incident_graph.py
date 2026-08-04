@@ -71,31 +71,38 @@ class IncidentGraphBuilder:
         correlation_a: Correlation,
         correlation_b: Correlation,
     ) -> tuple[int, list[str]]:
-        """
-        Compute the total weighted score and the list of matched
-        criteria for a single pair of correlations.
-        """
 
         matched_criteria: list[str] = []
+
+        shared_event = self._shared_events(correlation_a, correlation_b)
+        shared_entity = self._shared_entities(correlation_a, correlation_b)
+        same_executable = self._same_executable(correlation_a, correlation_b)
+        same_user = self._same_user(correlation_a, correlation_b)
+        temporal = self._temporal_proximity(correlation_a, correlation_b)
+
         score = 0
 
-        if self._shared_events(correlation_a, correlation_b):
+        # Strongest forensic evidence
+        if shared_event:
             matched_criteria.append("shared_event")
             score += EDGE_WEIGHTS["shared_event"]
 
-        if self._shared_entities(correlation_a, correlation_b):
+        if shared_entity:
             matched_criteria.append("shared_entity")
             score += EDGE_WEIGHTS["shared_entity"]
 
-        if self._same_executable(correlation_a, correlation_b):
+        # Executable/user are ONLY supporting evidence.
+        # They never create an edge by themselves.
+        if same_executable and (shared_event or shared_entity):
             matched_criteria.append("same_executable")
             score += EDGE_WEIGHTS["same_executable"]
 
-        if self._same_user(correlation_a, correlation_b):
+        if same_user and (shared_event or shared_entity):
             matched_criteria.append("same_user")
             score += EDGE_WEIGHTS["same_user"]
 
-        if self._temporal_proximity(correlation_a, correlation_b):
+        # Time proximity only reinforces an already-existing relationship.
+        if temporal and score > 0:
             matched_criteria.append("temporal_proximity")
             score += EDGE_WEIGHTS["temporal_proximity"]
 

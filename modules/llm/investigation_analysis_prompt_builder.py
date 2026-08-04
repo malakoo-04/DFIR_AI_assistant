@@ -22,33 +22,42 @@ class InvestigationAnalysisPromptBuilder:
         detailed, summarized, noise = self._tier(prioritized_incidents)
 
         sections = [
-            self._build_system(
-                len(prioritized_incidents),
-                len(detailed),
-            ),
-            self._build_investigation_overview(
-                prioritized_incidents,
-                timeline,
-            ),
-            self._build_timeline_digest(
-                timeline,
-            ),
-            self._build_attack_chain(
-                attack_chain,
-            ),
-            self._build_incident_index(
-                detailed,
-                summarized,
-                noise,
-            ),
-            self._build_detailed_incidents(
-                detailed,
-            ),
-            self._build_inventory_context(
-                inventory_context or [],
-            ),
-            self._build_task(),
-        ]
+        self._build_system(
+            len(prioritized_incidents),
+            len(detailed),
+        ),
+
+        # Most important evidence FIRST
+        self._build_detailed_incidents(
+            detailed,
+        ),
+
+        self._build_attack_chain(
+            attack_chain,
+        ),
+
+        self._build_incident_index(
+            detailed,
+            summarized,
+            noise,
+        ),
+
+        self._build_investigation_overview(
+            prioritized_incidents,
+            timeline,
+        ),
+
+        self._build_timeline_digest(
+            timeline,
+        ),
+
+        # Lowest priority
+        self._build_inventory_context(
+            inventory_context or [],
+        ),
+
+        self._build_task(),
+    ]
 
         return "\n\n".join(section for section in sections if section)
 
@@ -120,6 +129,11 @@ class InvestigationAnalysisPromptBuilder:
             "",
             "You must:",
             "- Reason only from the evidence supplied below.",
+            """The description and evidence fields inside each correlation are the primary forensic evidence.
+
+                Treat them as ground truth.
+
+                Never replace them with your own cybersecurity knowledge."""
             "- Never invent evidence, fields, artifacts, or events that are",
             "  not present in this prompt.",
             "- Treat incidents listed only as one-line summaries as lower-",
@@ -314,6 +328,7 @@ class InvestigationAnalysisPromptBuilder:
 
     @classmethod
     def _build_detailed_incidents(cls, incidents: list[dict]) -> str:
+
         lines = [
             "# DETAILED INCIDENTS",
             "",
@@ -323,45 +338,28 @@ class InvestigationAnalysisPromptBuilder:
             lines.append("(none)")
             return "\n".join(lines)
 
-        grouped = defaultdict(list)
+        # Most important incident first
+        incidents = sorted(
+            incidents,
+            key=lambda i: (
+                {"critical": 3, "high": 2, "medium": 1, "low": 0}.get(
+                    str(i.get("severity")).lower(), 0
+                ),
+                i.get("confidence", 0),
+                len(i.get("primary_correlations", [])),
+            ),
+            reverse=True,
+        )
 
-        for incident in incidents:
-            rules = tuple(sorted(incident.get("rules") or ["unknown"]))
-            grouped[rules].append(incident)
+        for index, incident in enumerate(incidents, 1):
 
-        for rules, group in grouped.items():
-            if len(group) >= 5:
-                lines.append("=" * 70)
-                lines.append(f"Incident Category : {', '.join(rules)}")
-                lines.append(f"Occurrences       : {len(group)}")
-                lines.append("")
-                lines.append("Representative examples:")
+            lines.append("=" * 80)
+            lines.append(f"INCIDENT #{index}")
+            lines.append("=" * 80)
+            lines.append("")
 
-                for incident in group[:3]:
-                    correlations = (
-                        incident.get("primary_correlations", [])
-                        + incident.get("supporting_correlations", [])
-                    )
-
-                    if correlations:
-                        c = correlations[0]
-                        title = (
-                            c.get("title")
-                            or c.get("description")
-                            or "No title"
-                        )
-                        lines.append(f"- {title}")
-
-                omitted = len(group) - 3
-                if omitted > 0:
-                    lines.append(f"- {omitted} similar incidents omitted.")
-
-                lines.append("")
-                continue
-
-            for incident in group:
-                lines.append(cls._build_one_detailed_incident(incident))
-                lines.append("")
+            lines.append(cls._build_one_detailed_incident(incident))
+            lines.append("")
 
         return "\n".join(lines)
 
@@ -444,9 +442,12 @@ class InvestigationAnalysisPromptBuilder:
         lines = [
             "# INVENTORY CONTEXT",
             "",
-            "Artifacts discovered but not parsed into normalized events",
-            "(deduplicated once for the whole investigation). Supplementary",
-            "and low-confidence -- never overrides incident evidence.",
+            "Unsupported or unparsed artifacts discovered during acquisition.",
+            """This section is supplementary evidence only.This section is NOT proof of malicious activity.
+
+It only lists files discovered during acquisition.
+
+Do not build an attack scenario from inventory artifacts unless they are explicitly referenced by a correlation.""",
             "",
         ]
 
@@ -454,11 +455,58 @@ class InvestigationAnalysisPromptBuilder:
             lines.append("(no additional inventory artifacts)")
             return "\n".join(lines)
 
-        for artifact in inventory_context:
-            lines.append(
-                f"- {artifact.get('name')} ({artifact.get('path')}): "
-                f"{artifact.get('description')}"
-            )
+        for group in inventory_context:
+
+            category = group.get("category", "unknown")
+            count = group.get("count", 0)
+
+            lines.append(f"## {category} ({count} artifact(s))")
+
+            for artifact in group.get("artifacts", []):
+
+                lines.append(f"- Name: {artifact.get('name')}")
+                lines.append(f"  Path: {artifact.get('path')}")
+
+                if artifact.get("description"):
+                    lines.append(f"  Description: {artifact['description']}")
+
+                if artifact.get("columns"):
+                    lines.append(
+                        "  Columns: "
+                        + ", ".join(str(x) for x in artifact["columns"])
+                    )
+
+                if artifact.get("tables"):
+                    lines.append(
+                        "  Tables: "
+                        + ", ".join(str(x) for x in artifact["tables"])
+                    )
+
+                if artifact.get("top_level_keys"):
+                    lines.append(
+                        "  JSON Keys: "
+                        + ", ".join(str(x) for x in artifact["top_level_keys"])
+                    )
+
+                if artifact.get("preview_rows"):
+                    lines.append("  Preview rows:")
+                    for row in artifact["preview_rows"]:
+                        lines.append(f"    {row}")
+
+                if artifact.get("preview"):
+                    lines.append("  Preview:")
+                    lines.append(
+                        "    "
+                        + artifact["preview"].replace("\n", "\n    ")
+                    )
+
+                if artifact.get("encoding"):
+                    lines.append(f"  Encoding: {artifact['encoding']}")
+
+                if artifact.get("lines") is not None:
+                    lines.append(f"  Lines: {artifact['lines']}")
+
+                lines.append("")
 
         return "\n".join(lines)
 
@@ -471,29 +519,83 @@ class InvestigationAnalysisPromptBuilder:
         lines = [
             "# TASK",
             "",
-            "Using only the evidence supplied above, produce ONE final DFIR",
-            "report answering, in order:",
+            "You are NOT writing one report per incident.",
             "",
-            "1. What happened on this machine? Reconstruct the chronological",
-            "   sequence of events across the WHOLE investigation, not one",
-            "   incident at a time.",
-            "2. What is the complete attack chain (initial access,",
-            "   execution, persistence, defense evasion, impact, etc.),",
-            "   citing which incidents/correlations (by ID) support each",
-            "   stage?",
-            "3. What is the principal incident, and what incident type /",
-            "   attack family does it belong to (ransomware, credential",
-            "   theft, brute force, persistence-only, etc.)? If more than",
-            "   one is plausible, list each candidate with supporting",
-            "   evidence.",
-            "4. Which of the other incidents are part of the same attack,",
-            "   versus unrelated/background activity (e.g. routine",
-            "   persistence noise)?",
-            "5. What is your overall confidence in this reconstruction, and",
-            "   what specific uncertainty or gaps remain?",
-            "6. If the supplied evidence is insufficient to support a",
-            "   reliable conclusion, say so explicitly instead of guessing.",
-            "7. Never invent evidence; base every conclusion only on the",
-            "   information supplied above.",
+            "Your mission is to analyze the ENTIRE investigation as a single DFIR case.",
+            "",
+            "Every incident shown above is one piece of the same investigation.",
+            "",
+            "Some incidents represent routine Windows activity.",
+            "Some incidents represent the actual attack.",
+            "",
+            "Your primary objective is to distinguish signal from background noise.",
+            "",
+            "Produce ONE final investigation report.",
+            "",
+            "Determine:",
+            "",
+            """1. Determine whether the supplied evidence proves an attack.
+
+                If the evidence does not prove an attack,
+                state exactly that.
+
+                Do NOT invent an attack scenario.""",
+            "",
+            """2. Reconstruct ONLY the attack stages explicitly supported by evidence.
+
+                    If a stage is unsupported,
+                    write "Unknown".
+
+                    Never infer missing stages""",
+            "",
+            """3. Explain why your conclusion is supported.
+
+                    If multiple explanations exist,
+                    compare them.
+
+                    If none can be proven,
+                    say so..""",
+            "",
+            "4. Mention alternative hypotheses ONLY if supported by evidence.",
+            "",
+            "5. Ignore routine Windows activity unless it directly supports the attack.",
+            "",
+            """6. Every technical statement must cite
+
+            - incident ID
+
+            AND
+
+            - correlation ID.
+
+            Statements without evidence must not appear.""",
+            "",
+            """7. Never invent evidence.Never use general cybersecurity knowledge to fill missing information.
+
+Only facts explicitly contained inside the supplied correlations may appear in the report.""",
+            
+            "",
+            "8. If evidence is insufficient, explicitly state that.",
+            """Before writing the report, follow these rules:
+
+1. List every conclusion you intend to make.
+
+2. For each conclusion, identify the correlation(s) that prove it.
+
+3. If no correlation proves the conclusion, delete it.
+
+4. Never infer initial access.
+
+5. Never infer malware family.
+
+6. Never infer phishing.
+
+7. Never infer browser exploitation.
+
+8. Never infer persistence unless a persistence correlation exists.
+
+9. Unknown is always preferable to guessing."""
         ]
+
+        
         return "\n".join(lines)

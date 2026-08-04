@@ -101,6 +101,13 @@ def main() -> None:
     serialized_incidents = IncidentSerializer().serialize(incidents, correlations)
     prioritized_incidents = IncidentPrioritizer().prioritize(serialized_incidents)
     attack_chain = AttackChainBuilder().build(prioritized_incidents)
+    from modules.correlation.incident_filter import IncidentFilter
+
+    filterer = IncidentFilter()
+    incidents = filterer.filter(incidents)
+
+    enricher = IncidentEnricher()
+    incidents = enricher.enrich(incidents, correlations)
 
     _section("INCIDENTS")
     print(f"Incidents generated: {len(serialized_incidents)}")
@@ -130,6 +137,8 @@ def main() -> None:
     )
     print(f"\nPrompt size: {len(prompt_preview):,} characters "
           f"(~{len(prompt_preview) // 4:,} estimated tokens)")
+    with open("prompt_debug.txt", "w", encoding="utf-8") as f:
+        f.write(prompt_preview)
 
     try:
         response = agent.analyze(
