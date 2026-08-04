@@ -1,103 +1,15 @@
-"""Deterministic prompt construction for the Investigation Analysis Agent.
-
-This is the replacement for the "one LLM call per incident" architecture.
-It sits at the very end of the deterministic pipeline and consumes
-*everything* the pipeline has already computed for the whole
-investigation -- not one incident:
-
-    IncidentSerializer.serialize()   -> all incidents
-            v
-    IncidentPrioritizer.prioritize() -> incidents ranked by significance
-            v
-    InvestigationAnalysisPromptBuilder   <- this module
-            v
-    InvestigationAnalysisAgent
-            v
-    ONE final DFIR report
-
-Why one prompt instead of N
-----------------------------
-The Correlation Engine and Incident Builder already did the expensive
-deterministic work of turning ~360k raw events into a few hundred
-incidents, most of which are single-correlation, low-signal clusters.
-Asking the model to look at each one in isolation throws that structure
-away: the model never gets the chance to notice that incident #12
-(a scheduled task) and incident #340 (a PowerShell download) and
-incident #501 (files renamed with a ransom-note extension) are all
-part of the *same* attack chain, because it never sees them together.
-
-Sending all incidents to the model is a token-budget problem, not a
-free choice: even compact ~1KB-per-incident summaries for 500+
-incidents would blow past a local model's context window. But the
-answer to that budget problem is NOT "only look at the top N and
-drop the rest" -- an incident type the pipeline hasn't seen before
-could be sitting at rank 200. Every incident must participate in the
-reasoning; only its *representation* gets more compact as its own
-evidence volume shrinks. Three tiers, decided by each incident's own
-content -- never by an arbitrary rank cutoff:
-
-    - Tier 1, DETAILED: incidents that carry actual multi-signal
-      evidence (severity above "low", OR more than one correlation,
-      OR more than one rule involved). These get full evidence
-      (correlations + graph) rendered individually.
-    - Tier 2, SUMMARIZED: every other incident that still has at
-      least one correlation to its name gets one identified summary
-      line each (severity, confidence, rules, window, counts) --
-      still individually addressable by ID, just not expanded.
-    - Tier 3, AGGREGATED: genuine single-correlation, single-rule,
-      low-severity noise (e.g. one hit per ordinary Windows service
-      registration) is rolled up into counts per rule. This is lossy
-      compression of *volume*, not of *presence* -- the model is told
-      exactly how many such incidents exist and which rules produced
-      them, so nothing is silently missing from the picture.
-
-``max_detailed_incidents`` below is a safety valve for pathological
-cases (e.g. thousands of genuinely high-severity incidents), not a
-target to hit -- see its docstring. On a normal investigation, every
-incident that has real evidence behind it ends up in Tier 1 or Tier 2,
-i.e. individually represented; only Tier 3 is compressed, and even
-that compression is fully accounted for (counts, not omission).
-
-A single compact global timeline digest (counts and notable event
-types per rule/category, not 360k raw rows) gives the model
-chronological grounding without the tokenizer-breaking dump that
-caused the original "tokenize error" failure.
-
-This module performs no reasoning, no classification of attack type,
-no scoring. Tiering by evidence volume is bookkeeping, not forensic
-judgment -- it only decides *how much space* an incident gets in the
-prompt, never whether it is mentioned.
-"""
+"""Deterministic prompt construction for the Investigation Analysis Agent."""
 
 from __future__ import annotations
 
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 
 
 class InvestigationAnalysisPromptBuilder:
     """Build a single deterministic prompt for the whole investigation."""
 
     def __init__(self, max_detailed_incidents: int | None = None):
-        """
-        Parameters
-        ----------
-        max_detailed_incidents:
-            Safety valve only. Tier 1 (full detail) is normally
-            everything that qualifies by content (see module
-            docstring) -- on a typical investigation that is a few
-            dozen incidents out of several hundred, which comfortably
-            fits a local model's context window (measured: ~27k
-            incidents -> ~6-7k prompt tokens on a 575-incident real
-            dataset). If a pathological investigation produces far
-            more signal-bearing incidents than that, this caps how
-            many get full detail (still by IncidentPrioritizer's
-            ranking, most significant first) -- but incidents beyond
-            the cap fall back to Tier 2 (individual summary line),
-            never to Tier 3 (aggregated). Nothing is ever dropped
-            entirely by this parameter. ``None`` (default) means no
-            cap: every signal-bearing incident gets full detail.
-        """
         self._max_detailed_incidents = max_detailed_incidents
 
     def build(
@@ -105,42 +17,43 @@ class InvestigationAnalysisPromptBuilder:
         prioritized_incidents: list[dict],
         timeline: list[dict],
         inventory_context: list[dict],
+        attack_chain: list[dict] | dict | None = None,
     ) -> str:
-        """
-        Build the full, single prompt for the whole investigation.
-
-        Parameters
-        ----------
-        prioritized_incidents:
-            The FULL list of serialized incidents, already ordered by
-            ``IncidentPrioritizer.prioritize()`` (most significant
-            first). Every one of them is represented in the resulting
-            prompt, in one of the three tiers described in the module
-            docstring -- this method does not truncate the list.
-        timeline:
-            The full forensic timeline (``TimelineBuilder.build()``
-            output) for the whole investigation.
-        inventory_context:
-            Artifacts that were never parsed into normalized events
-            (deduplicated once, globally -- not per incident).
-        """
         detailed, summarized, noise = self._tier(prioritized_incidents)
 
         sections = [
-            self._build_system(len(prioritized_incidents), len(detailed)),
-            self._build_investigation_overview(prioritized_incidents, timeline),
-            self._build_timeline_digest(timeline),
-            self._build_incident_index(detailed, summarized, noise),
-            self._build_detailed_incidents(detailed),
-            self._build_inventory_context(inventory_context or []),
+            self._build_system(
+                len(prioritized_incidents),
+                len(detailed),
+            ),
+            self._build_investigation_overview(
+                prioritized_incidents,
+                timeline,
+            ),
+            self._build_timeline_digest(
+                timeline,
+            ),
+            self._build_attack_chain(
+                attack_chain,
+            ),
+            self._build_incident_index(
+                detailed,
+                summarized,
+                noise,
+            ),
+            self._build_detailed_incidents(
+                detailed,
+            ),
+            self._build_inventory_context(
+                inventory_context or [],
+            ),
             self._build_task(),
         ]
 
         return "\n\n".join(section for section in sections if section)
 
     # ------------------------------------------------------------------
-    # Incident tiering -- content-driven, never a rank cutoff that drops
-    # incidents. See the module docstring for what each tier means.
+    # Incident tiering
     # ------------------------------------------------------------------
 
     def _tier(
@@ -166,14 +79,6 @@ class InvestigationAnalysisPromptBuilder:
 
     @staticmethod
     def _is_noise(incident: dict) -> bool:
-        """
-        A singleton, low-severity, single-rule incident is exactly the
-        shape a broad correlation rule produces for every ordinary,
-        legitimate object it matches (e.g. one "registry_persistence"
-        hit per routine Windows service). It carries no analytical
-        signal on its own. Everything else is signal-bearing and gets
-        an individual representation (Tier 1 or Tier 2).
-        """
         correlation_count = len(incident.get("primary_correlations") or []) + len(
             incident.get("supporting_correlations") or []
         )
@@ -271,7 +176,7 @@ class InvestigationAnalysisPromptBuilder:
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
-    # Section -- TIMELINE DIGEST (compact, not the raw 100k+ event dump)
+    # Section -- TIMELINE DIGEST
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -305,19 +210,48 @@ class InvestigationAnalysisPromptBuilder:
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
-    # Section -- INCIDENT INDEX (one line per incident, all of them)
+    # Section -- ATTACK CHAIN
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_attack_chain(attack_chain: list[dict] | dict | None) -> str:
+        lines = [
+            "# ATTACK CHAIN",
+            "",
+        ]
+        if not attack_chain:
+            lines.append("(no attack chain generated)")
+            return "\n".join(lines)
+
+        if isinstance(attack_chain, dict):
+            for stage, details in attack_chain.items():
+                lines.append(f"## {stage}")
+                if isinstance(details, list):
+                    for item in details:
+                        lines.append(f"  - {item}")
+                else:
+                    lines.append(f"  {details}")
+        elif isinstance(attack_chain, list):
+            for stage in attack_chain:
+                if isinstance(stage, dict):
+                    name = stage.get("stage") or stage.get("name") or "Stage"
+                    incidents = stage.get("incidents") or []
+                    lines.append(f"- **{name}**: {', '.join(str(i) for i in incidents)}")
+                else:
+                    lines.append(f"- {stage}")
+        else:
+            lines.append(str(attack_chain))
+
+        return "\n".join(lines).rstrip()
+
+    # ------------------------------------------------------------------
+    # Section -- INCIDENT INDEX
     # ------------------------------------------------------------------
 
     @classmethod
     def _build_incident_index(
         cls, detailed: list[dict], summarized: list[dict], noise: list[dict]
     ) -> str:
-        """
-        Every incident appears here, in one of three ways -- none are
-        silently omitted. Tier 1 (``detailed``) incidents are still
-        listed here too (with a pointer to their full evidence below)
-        so the index alone gives a complete map of the investigation.
-        """
         total = len(detailed) + len(summarized) + len(noise)
         lines = [
             "# INCIDENT INDEX",
@@ -375,29 +309,61 @@ class InvestigationAnalysisPromptBuilder:
         return "\n".join(lines).rstrip()
 
     # ------------------------------------------------------------------
-    # Section -- DETAILED INCIDENTS (top-N, full evidence)
+    # Section -- DETAILED INCIDENTS
     # ------------------------------------------------------------------
 
     @classmethod
     def _build_detailed_incidents(cls, incidents: list[dict]) -> str:
         lines = [
-            "# DETAILED EVIDENCE (top-priority incidents)",
-            "",
-            "Full correlation and graph evidence for the highest-priority",
-            "incidents identified above. Reference these by their",
-            "[incident_id prefix] from the INCIDENT INDEX.",
+            "# DETAILED INCIDENTS",
             "",
         ]
 
         if not incidents:
-            lines.append("(no incidents met the detail threshold)")
+            lines.append("(none)")
             return "\n".join(lines)
 
-        for incident in incidents:
-            lines.append(cls._build_one_detailed_incident(incident))
-            lines.append("")
+        grouped = defaultdict(list)
 
-        return "\n".join(lines).rstrip()
+        for incident in incidents:
+            rules = tuple(sorted(incident.get("rules") or ["unknown"]))
+            grouped[rules].append(incident)
+
+        for rules, group in grouped.items():
+            if len(group) >= 5:
+                lines.append("=" * 70)
+                lines.append(f"Incident Category : {', '.join(rules)}")
+                lines.append(f"Occurrences       : {len(group)}")
+                lines.append("")
+                lines.append("Representative examples:")
+
+                for incident in group[:3]:
+                    correlations = (
+                        incident.get("primary_correlations", [])
+                        + incident.get("supporting_correlations", [])
+                    )
+
+                    if correlations:
+                        c = correlations[0]
+                        title = (
+                            c.get("title")
+                            or c.get("description")
+                            or "No title"
+                        )
+                        lines.append(f"- {title}")
+
+                omitted = len(group) - 3
+                if omitted > 0:
+                    lines.append(f"- {omitted} similar incidents omitted.")
+
+                lines.append("")
+                continue
+
+            for incident in group:
+                lines.append(cls._build_one_detailed_incident(incident))
+                lines.append("")
+
+        return "\n".join(lines)
 
     @classmethod
     def _build_one_detailed_incident(cls, incident: dict) -> str:
@@ -445,22 +411,7 @@ class InvestigationAnalysisPromptBuilder:
 
         return "\n".join(lines).rstrip()
 
-    # A run this long of only base64 alphabet characters is virtually
-    # never something an analyst (or the model) needs to read
-    # character-for-character -- it is payload, not forensic narrative.
-    # Redacting it in place (rather than dropping the whole evidence
-    # value) keeps the surrounding command/structure intact, e.g.
-    # "...FromBase64String('<b64:2192 chars>')..." still shows the
-    # technique (Base64-encoded payload passed to a decoder) without
-    # spending ~500+ tokens reproducing the payload itself.
     _BASE64_RUN = re.compile(r"[A-Za-z0-9+/]{80,}={0,2}")
-
-    # Hard cap on any single evidence value after base64 redaction, so
-    # one unusually verbose field (a long script body, a giant raw
-    # command line, etc.) still cannot dominate the prompt the way one
-    # correlation's evidence did before this fix (measured: up to
-    # ~15,000 characters for a single PowerShell correlation, repeated
-    # across dozens of correlations from the same script).
     _MAX_EVIDENCE_VALUE_CHARS = 500
 
     @classmethod

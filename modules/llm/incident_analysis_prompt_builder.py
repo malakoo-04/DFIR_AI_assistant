@@ -180,11 +180,17 @@ class IncidentAnalysisPromptBuilder:
         return ", ".join(values) if values else "(none)"
 
     @classmethod
-    def _build_correlation_section(cls, title: str, correlations: list[dict]) -> str:
+    def _build_correlation_section(
+        cls, title: str, correlations: list[dict], *, summarize: bool = False
+    ) -> str:
         lines = [f"## {title}", ""]
 
         if not correlations:
             lines.append("(none)")
+            return "\n".join(lines)
+
+        if summarize:
+            lines.extend(cls._build_summarized_correlations(correlations))
             return "\n".join(lines)
 
         for correlation in correlations:
@@ -199,19 +205,32 @@ class IncidentAnalysisPromptBuilder:
     @staticmethod
     def _format_correlation(correlation: dict) -> list[str]:
         correlation = correlation or {}
+
         entity_ids = correlation.get("entity_ids") or []
         event_ids = correlation.get("event_ids") or []
+        techniques = correlation.get("techniques") or []
+        evidence = correlation.get("evidence") or {}
 
-        return [
+        lines = [
             f"- Correlation ID: {correlation.get('correlation_id')}",
             f"  Rule: {correlation.get('rule_name')}",
+            f"  Title: {correlation.get('title')}",
+            f"  Description: {correlation.get('description')}",
             f"  Severity: {correlation.get('severity')}",
             f"  Confidence: {correlation.get('confidence')}",
             f"  Start Time: {correlation.get('start_time')}",
             f"  End Time: {correlation.get('end_time')}",
             f"  Entity IDs: {', '.join(entity_ids) if entity_ids else '(none)'}",
             f"  Event IDs: {', '.join(event_ids) if event_ids else '(none)'}",
+            f"  MITRE Techniques: {', '.join(techniques) if techniques else '(none)'}",
         ]
+
+        if evidence:
+            lines.append("  Evidence:")
+            for key in sorted(evidence):
+                lines.append(f"    {key}: {evidence[key]}")
+
+        return lines
 
     @staticmethod
     def _build_graph(edges: list[dict]) -> str:

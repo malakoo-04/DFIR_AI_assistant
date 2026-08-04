@@ -1,4 +1,3 @@
-# tests/run_investigation_analysis.py
 """End-to-end run: real KAPE dataset -> ONE final DFIR report.
 
 This replaces the loop in test_incident_analysis_pipeline.py that called
@@ -14,6 +13,7 @@ from __future__ import annotations
 import json
 import sys
 
+from modules.correlation.attack_chain_builder import AttackChainBuilder
 from modules.correlation.engine import CorrelationEngine
 from modules.correlation.incident_builder import IncidentCandidateBuilder
 from modules.correlation.incident_enricher import IncidentEnricher
@@ -43,11 +43,6 @@ from modules.timeline.builder import TimelineBuilder
 
 DATASET_PATH = "input/KAPE_OUTPUT"
 OLLAMA_MODEL_NAME = "qwen2.5:14b"
-# Safety valve only -- None means every signal-bearing incident gets full
-# detail (see InvestigationAnalysisPromptBuilder's docstring). Only set
-# this if a real run shows the prompt exceeding your model's context
-# window; even then, incidents beyond the cap fall back to a one-line
-# summary, they are never dropped.
 MAX_DETAILED_INCIDENTS: int | None = None
 
 
@@ -64,8 +59,6 @@ def _fail(stage: str, error: Exception) -> None:
 
 
 def main() -> None:
-    # DISCOVERY / PARSING / NORMALIZATION / TIMELINE / CORRELATION are
-    # identical to app.py and test_incident_analysis_pipeline.py.
     scanner = DiscoveryEngine(DATASET_PATH)
     artifacts = scanner.scan()
     inventory = Inventory()
@@ -101,12 +94,13 @@ def main() -> None:
     )
     correlations = correlation_engine.run(timeline)
 
-    # INCIDENTS (unchanged)
+    # INCIDENTS
     graph_edges = IncidentGraphBuilder().build(correlations)
     incidents = IncidentCandidateBuilder().build(correlations, graph_edges)
     incidents = IncidentEnricher().enrich(incidents, correlations)
     serialized_incidents = IncidentSerializer().serialize(incidents, correlations)
     prioritized_incidents = IncidentPrioritizer().prioritize(serialized_incidents)
+    attack_chain = AttackChainBuilder().build(prioritized_incidents)
 
     _section("INCIDENTS")
     print(f"Incidents generated: {len(serialized_incidents)}")
@@ -114,8 +108,7 @@ def main() -> None:
         print("No incidents -- nothing to send to the model.")
         return
 
-    # INVENTORY CONTEXT -- built ONCE for the whole investigation, not
-    # per incident (there is no longer a "per incident" step at all).
+    # INVENTORY CONTEXT
     extractor = InventoryContextExtractor()
     extracted = [extractor.extract(path) for path in scanner.unknown_files] + [
         extractor.extract(artifact) for artifact in unparsed_recognized_artifacts
@@ -132,12 +125,16 @@ def main() -> None:
         _fail("Investigation Analysis Agent (construction)", error)
         return
 
-    prompt_preview = agent._build_prompt(prioritized_incidents, timeline, inventory_context)
+    prompt_preview = agent._build_prompt(
+        prioritized_incidents, timeline, inventory_context, attack_chain
+    )
     print(f"\nPrompt size: {len(prompt_preview):,} characters "
           f"(~{len(prompt_preview) // 4:,} estimated tokens)")
 
     try:
-        response = agent.analyze(prioritized_incidents, timeline, inventory_context)
+        response = agent.analyze(
+            prioritized_incidents, timeline, inventory_context, attack_chain
+        )
     except InvestigationAnalysisError as error:
         _fail("LLM Analysis (whole investigation)", error)
         return

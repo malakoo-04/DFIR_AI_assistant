@@ -1,21 +1,4 @@
-"""Prompt -> local model boundary for the Investigation Analysis Agent.
-
-Replaces the "one call per incident" loop that used
-``IncidentAnalysisAgent``. Same architectural seam (a single
-``_call_model`` method isolating the Ollama backend, streaming
-consumption, idle timeout, keep_alive), deliberately duplicated rather
-than shared, so this module can evolve independently and so a change
-here can never silently affect ``IncidentAnalysisAgent`` or
-``QwenValidator``.
-
-    IncidentSerializer -> IncidentPrioritizer
-            v
-    InvestigationAnalysisPromptBuilder
-            v
-    InvestigationAnalysisAgent        <- this module
-            v
-    ONE final DFIR report
-"""
+"""Prompt -> local model boundary for the Investigation Analysis Agent."""
 
 from __future__ import annotations
 
@@ -74,13 +57,6 @@ class InvestigationAnalysisAgent:
         timeout_seconds: float = 600.0,
         keep_alive: str | int = "30m",
     ):
-        """timeout_seconds is an idle timeout (see IncidentAnalysisAgent's
-
-        docstring for why): the default is higher than the per-incident
-        agent's because a single whole-investigation prompt is much
-        larger, so individual streamed chunks can legitimately take
-        longer to arrive even while generation is healthy.
-        """
         self._prompt_builder = prompt_builder or InvestigationAnalysisPromptBuilder()
         self._model_name = model_name
         self._temperature = temperature
@@ -93,15 +69,14 @@ class InvestigationAnalysisAgent:
         prioritized_incidents: list[dict],
         timeline: list[dict],
         inventory_context: list[dict],
+        attack_chain: list[dict] | dict | None = None,
     ) -> InvestigationLLMResponse:
-        """Build the investigation-wide prompt and return the model's
-
-        response. This is called exactly ONCE per investigation, not
-        once per incident.
-        """
+        """Build the investigation-wide prompt and return the model's response."""
         self._validate_inputs(prioritized_incidents, timeline, inventory_context)
 
-        prompt = self._build_prompt(prioritized_incidents, timeline, inventory_context)
+        prompt = self._build_prompt(
+            prioritized_incidents, timeline, inventory_context, attack_chain
+        )
 
         response = self._execute_model(prompt)
 
@@ -153,10 +128,11 @@ class InvestigationAnalysisAgent:
         prioritized_incidents: list[dict],
         timeline: list[dict],
         inventory_context: list[dict],
+        attack_chain: list[dict] | dict | None = None,
     ) -> str:
         try:
             return self._prompt_builder.build(
-                prioritized_incidents, timeline, inventory_context
+                prioritized_incidents, timeline, inventory_context, attack_chain
             )
         except InvestigationAnalysisError:
             raise
@@ -166,7 +142,7 @@ class InvestigationAnalysisAgent:
             ) from error
 
     # ------------------------------------------------------------------
-    # Model invocation (identical seam/behavior to IncidentAnalysisAgent)
+    # Model invocation
     # ------------------------------------------------------------------
 
     @dataclass(slots=True, frozen=True)
