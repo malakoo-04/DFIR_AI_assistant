@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DFIR-AI — Forensic Investigation Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   DFIR-AI — Design tokens
+   Palette: deep slate-navy void, engineered blue primary,
+   cyan for forensic data values, muted terminal-green for
+   live process output. Typeface: IBM Plex Sans (UI) + IBM Plex
+   Mono (evidence values, logs, hashes, timestamps) — chosen
+   because Plex is an "engineered" grotesk family with a
+   monospace sibling built for exactly this kind of technical
+   pairing, reinforcing the chain-of-custody / instrumented
+   feel of forensic tooling.
+   ============================================================ */
+:root{
+  --void:#0A0D13;
+  --bg:#0D1119;
+  --surface:#11161F;
+  --surface-raised:#161C28;
+  --surface-hover:#1B2231;
+  --border:#212938;
+  --border-soft:#1A202C;
+  --border-strong:#2E3A4E;
+
+  --text-primary:#E8ECF2;
+  --text-secondary:#93A0B4;
+  --text-tertiary:#5B6679;
+  --text-disabled:#3E4759;
+
+  --blue:#2F6FED;
+  --blue-bright:#5B93FF;
+  --blue-dim:#1B3A73;
+  --blue-glow:rgba(47,111,237,0.35);
+
+  --cyan:#3FD0E0;
+  --green:#22C67D;
+  --green-dim:#0F3D2C;
+  --amber:#E8A93B;
+  --red:#E5484D;
+  --red-dim:#3A1518;
+
+  --mono-term:#7FDBA6;
+
+  --radius-sm:6px;
+  --radius:10px;
+  --radius-lg:14px;
+
+  --shadow-1:0 1px 2px rgba(0,0,0,0.5);
+  --shadow-2:0 4px 16px rgba(0,0,0,0.45);
+  --shadow-glow:0 0 0 1px rgba(47,111,237,0.4), 0 0 24px rgba(47,111,237,0.18);
+
+  --font-ui:'IBM Plex Sans', -apple-system, sans-serif;
+  --font-mono:'IBM Plex Mono', 'SF Mono', monospace;
+}
+
+*{box-sizing:border-box; margin:0; padding:0;}
+html,body{height:100%;}
+body{
+  background:var(--bg);
+  color:var(--text-primary);
+  font-family:var(--font-ui);
+  font-size:14px;
+  line-height:1.5;
+  min-height:100vh;
+  position:relative;
+  overflow-x:hidden;
+}
+
+/* ambient background texture — faint engineered grid + vignette, restrained */
+body::before{
+  content:"";
+  position:fixed; inset:0;
+  background-image:
+    linear-gradient(rgba(47,111,237,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47,111,237,0.05) 1px, transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(ellipse 80% 60% at 50% 0%, black 0%, transparent 70%);
+  -webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 0%, black 0%, transparent 70%);
+  pointer-events:none;
+  z-index:0;
+}
+body::after{
+  content:"";
+  position:fixed; inset:0;
+  background:radial-gradient(ellipse 70% 50% at 50% -10%, rgba(47,111,237,0.10), transparent 60%);
+  pointer-events:none;
+  z-index:0;
+}
+
+button{font-family:inherit; cursor:pointer;}
+input,textarea{font-family:inherit;}
+::selection{background:var(--blue-dim); color:#fff;}
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border-strong); border-radius:8px;}
+::-webkit-scrollbar-thumb:hover{background:var(--text-tertiary);}
+
+a{color:var(--blue-bright); text-decoration:none;}
+
+/* ---------- Layout scaffolding ---------- */
+.screen{display:none; min-height:100vh; position:relative; z-index:1;}
+.screen.active{display:block;}
+
+/* ---------- Brand mark ---------- */
+.brand{display:flex; align-items:center; gap:10px; user-select:none;}
+.brand-mark{
+  width:30px; height:30px; border-radius:7px;
+  background:linear-gradient(155deg, var(--blue) 0%, #1D4FBF 100%);
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.06) inset, 0 2px 8px rgba(47,111,237,0.35);
+  flex-shrink:0;
+}
+.brand-mark svg{width:16px; height:16px;}
+.brand-word{font-weight:600; font-size:16px; letter-spacing:-0.01em; color:var(--text-primary);}
+.brand-word b{color:var(--blue-bright); font-weight:700;}
+.brand-sub{font-family:var(--font-mono); font-size:10.5px; color:var(--text-tertiary); letter-spacing:0.06em; text-transform:uppercase; margin-top:1px;}
+
+/* ============================================================
+   PAGE 1 — LOGIN
+   ============================================================ */
+#page-login{
+  display:flex; align-items:center; justify-content:center;
+  min-height:100vh; padding:24px;
+}
+.login-card{
+  width:100%; max-width:392px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:40px 36px 32px;
+  box-shadow:var(--shadow-2);
+  position:relative;
+  z-index:1;
+  animation:riseIn .5s cubic-bezier(.16,1,.3,1);
+}
+@keyframes riseIn{from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);}}
+.login-head{display:flex; flex-direction:column; align-items:center; text-align:center; margin-bottom:30px;}
+.login-head .brand-mark{width:46px; height:46px; border-radius:11px; margin-bottom:16px;}
+.login-head .brand-mark svg{width:24px; height:24px;}
+.login-head .brand-word{font-size:21px;}
+.login-head .brand-sub{margin-top:6px; font-size:11px;}
+
+.field{margin-bottom:16px;}
+.field label{
+  display:block; font-size:12px; font-weight:600; color:var(--text-secondary);
+  margin-bottom:7px; letter-spacing:0.01em;
+}
+.field input, .field textarea{
+  width:100%; background:var(--void); border:1px solid var(--border-strong);
+  border-radius:var(--radius-sm); color:var(--text-primary); padding:11px 13px;
+  font-size:13.5px; outline:none; transition:border-color .15s, box-shadow .15s;
+}
+.field input::placeholder, .field textarea::placeholder{color:var(--text-disabled);}
+.field input:focus, .field textarea:focus{
+  border-color:var(--blue); box-shadow:0 0 0 3px var(--blue-glow);
+}
+.field-hint{font-size:11.5px; color:var(--text-tertiary); margin-top:6px;}
+
+.btn{
+  border-radius:var(--radius-sm); border:1px solid transparent;
+  font-weight:600; font-size:13.5px; padding:11px 18px;
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  transition:background .15s, border-color .15s, transform .1s, box-shadow .15s;
+  white-space:nowrap;
+}
+.btn svg{width:16px; height:16px; flex-shrink:0;}
+.btn:active{transform:translateY(1px);}
+.btn-primary{
+  background:linear-gradient(180deg, var(--blue-bright), var(--blue));
+  color:#fff; box-shadow:0 1px 0 rgba(255,255,255,0.15) inset, 0 4px 14px rgba(47,111,237,0.28);
+}
+.btn-primary:hover{box-shadow:0 1px 0 rgba(255,255,255,0.2) inset, 0 6px 20px rgba(47,111,237,0.4);}
+.btn-primary:disabled{background:var(--surface-raised); color:var(--text-disabled); box-shadow:none; cursor:not-allowed; border:1px solid var(--border);}
+.btn-secondary{
+  background:var(--surface-raised); color:var(--text-primary); border:1px solid var(--border-strong);
+}
+.btn-secondary:hover{background:var(--surface-hover); border-color:#3A4863;}
+.btn-secondary:disabled{color:var(--text-disabled); cursor:not-allowed; background:var(--surface);}
+.btn-ghost{background:transparent; color:var(--text-secondary); border:1px solid transparent;}
+.btn-ghost:hover{background:var(--surface-raised); color:var(--text-primary);}
+.btn-block{width:100%;}
+.btn-lg{padding:14px 22px; font-size:14.5px;}
+
+.login-card .btn-primary{margin-top:6px;}
+.login-foot{margin-top:22px; text-align:center; font-size:11.5px; color:var(--text-tertiary); font-family:var(--font-mono);}
+.login-error{
+  display:none; align-items:center; gap:8px; background:var(--red-dim); border:1px solid #5C2328;
+  color:#F3A6A9; font-size:12.5px; padding:9px 12px; border-radius:var(--radius-sm); margin-bottom:16px;
+}
+.login-error svg{width:14px; height:14px; flex-shrink:0;}
+
+/* ============================================================
+   Shared app chrome (post-login)
+   ============================================================ */
+.topbar{
+  height:60px; border-bottom:1px solid var(--border-soft);
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 28px; position:sticky; top:0; z-index:20;
+  background:rgba(13,17,25,0.85); backdrop-filter:blur(10px);
+}
+.topbar-left{display:flex; align-items:center; gap:22px;}
+.crumbs{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-tertiary); font-family:var(--font-mono);}
+.crumbs .sep{color:var(--border-strong);}
+.crumbs .current{color:var(--text-secondary); font-weight:500;}
+.topbar-right{display:flex; align-items:center; gap:14px;}
+.user-chip{display:flex; align-items:center; gap:9px; padding:6px 10px 6px 6px; border-radius:20px; border:1px solid var(--border); background:var(--surface);}
+.user-avatar{width:24px; height:24px; border-radius:50%; background:linear-gradient(155deg,#3A4863,#212938); display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:700; color:var(--text-secondary);}
+.user-name{font-size:12.5px; color:var(--text-secondary); font-weight:500;}
+.icon-btn{
+  width:32px; height:32px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center;
+  background:transparent; border:1px solid transparent; color:var(--text-tertiary);
+}
+.icon-btn:hover{background:var(--surface-raised); color:var(--text-secondary); border-color:var(--border);}
+.icon-btn svg{width:16px; height:16px;}
+
+.shell{max-width:1180px; margin:0 auto; padding:0 28px;}
+
+/* ============================================================
+   PAGE 2 — HOME
+   ============================================================ */
+#page-home .shell{
+  min-height:calc(100vh - 60px);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; padding-top:60px; padding-bottom:60px;
+}
+.home-eyebrow{
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:0.12em; text-transform:uppercase;
+  color:var(--blue-bright); display:flex; align-items:center; gap:8px; margin-bottom:22px;
+  background:var(--blue-dim); border:1px solid #234179; padding:6px 13px; border-radius:20px;
+}
+.home-eyebrow .dot{width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 0 3px var(--green-dim);}
+.home-title{font-size:34px; font-weight:700; letter-spacing:-0.02em; margin-bottom:14px; max-width:640px;}
+.home-title span{color:var(--text-secondary); font-weight:600;}
+.home-desc{font-size:15px; color:var(--text-secondary); max-width:560px; line-height:1.65; margin-bottom:40px;}
+.home-desc b{color:var(--text-primary); font-weight:600;}
+
+.home-cta{
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+}
+.big-cta{
+  padding:18px 38px; font-size:15.5px; border-radius:var(--radius);
+  display:flex; align-items:center; gap:11px;
+}
+.big-cta svg{width:19px; height:19px;}
+.home-cta-hint{font-size:12px; color:var(--text-tertiary); font-family:var(--font-mono);}
+
+.home-sources{display:flex; gap:12px; margin-top:56px;}
+.source-pill{
+  display:flex; align-items:center; gap:8px; padding:9px 15px; border-radius:20px;
+  border:1px solid var(--border); background:var(--surface); font-size:12px; color:var(--text-secondary); font-family:var(--font-mono);
+}
+.source-pill svg{width:14px; height:14px; color:var(--text-tertiary);}
+
+/* ============================================================
+   PAGE 3 — NEW INVESTIGATION
+   ============================================================ */
+.page-head{padding:32px 0 24px;}
+.page-head h1{font-size:22px; font-weight:700; letter-spacing:-0.01em; margin-bottom:6px;}
+.page-head p{color:var(--text-secondary); font-size:13.5px; max-width:620px;}
+
+.ni-grid{display:grid; grid-template-columns:1fr; gap:22px; padding-bottom:60px;}
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-1);
+}
+.card-pad{padding:24px;}
+.card-title{font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:3px; display:flex; align-items:center; gap:8px;}
+.card-title svg{width:15px; height:15px; color:var(--blue-bright);}
+.card-subtitle{font-size:12px; color:var(--text-tertiary); margin-bottom:18px;}
+
+.form-row{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+
+.dropzone{
+  border:1.5px dashed var(--border-strong); border-radius:var(--radius);
+  padding:44px 24px; text-align:center; margin-top:6px;
+  background:var(--void); transition:border-color .15s, background .15s;
+  cursor:pointer;
+}
+.dropzone:hover, .dropzone.dragover{border-color:var(--blue); background:rgba(47,111,237,0.05);}
+.dropzone-icon{
+  width:48px; height:48px; border-radius:12px; background:var(--surface-raised); border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center; margin:0 auto 16px;
+}
+.dropzone-icon svg{width:22px; height:22px; color:var(--blue-bright);}
+.dropzone h3{font-size:14px; font-weight:600; margin-bottom:6px;}
+.dropzone p{font-size:12.5px; color:var(--text-tertiary);}
+.dropzone .browse{color:var(--blue-bright); font-weight:600; text-decoration:underline; text-underline-offset:2px;}
+.dropzone-formats{display:flex; gap:8px; justify-content:center; margin-top:16px;}
+.format-tag{font-family:var(--font-mono); font-size:10.5px; color:var(--text-tertiary); border:1px solid var(--border); padding:3px 8px; border-radius:5px;}
+
+.file-picked{
+  display:none; align-items:center; gap:14px; margin-top:6px;
+  background:var(--void); border:1px solid var(--border-strong); border-radius:var(--radius);
+  padding:14px 16px;
+}
+.file-picked-icon{width:38px; height:38px; border-radius:9px; background:var(--green-dim); border:1px solid #1E5C42; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+.file-picked-icon svg{width:18px; height:18px; color:var(--green);}
+.file-picked-meta{flex:1; min-width:0;}
+.file-picked-name{font-size:13px; font-weight:600; font-family:var(--font-mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.file-picked-sub{font-size:11.5px; color:var(--text-tertiary); margin-top:2px;}
+.file-picked-remove{width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:var(--text-tertiary); background:transparent; border:1px solid transparent; flex-shrink:0;}
+.file-picked-remove:hover{background:var(--red-dim); color:#F3A6A9; border-color:#5C2328;}
+.file-picked-remove svg{width:15px; height:15px;}
+
+.actions-card .card-pad{padding:24px;}
+.actions-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:14px;}
+.action-btn{
+  background:var(--void); border:1px solid var(--border-strong); border-radius:var(--radius);
+  padding:20px 18px; text-align:left; display:flex; flex-direction:column; gap:10px;
+  transition:border-color .15s, background .15s, transform .1s;
+  color:var(--text-primary);
+}
+.action-btn:hover:not(:disabled){border-color:var(--blue); background:rgba(47,111,237,0.06); transform:translateY(-1px);}
+.action-btn:disabled{opacity:0.45; cursor:not-allowed;}
+.action-btn .a-icon{width:36px; height:36px; border-radius:9px; display:flex; align-items:center; justify-content:center;}
+.action-btn .a-icon svg{width:18px; height:18px;}
+.action-primary .a-icon{background:var(--blue-dim); border:1px solid #234179; color:var(--blue-bright);}
+.action-secondary .a-icon{background:var(--surface-raised); border:1px solid var(--border); color:var(--cyan);}
+.action-btn h4{font-size:13.5px; font-weight:600;}
+.action-btn p{font-size:11.5px; color:var(--text-tertiary); line-height:1.5;}
+.action-btn .a-arrow{margin-top:auto; display:flex; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--text-tertiary); font-family:var(--font-mono);}
+.action-btn:hover:not(:disabled) .a-arrow{color:var(--blue-bright);}
+.action-btn .a-arrow svg{width:12px; height:12px;}
+
+/* ============================================================
+   PAGE 4 — PROGRESS
+   ============================================================ */
+.prog-head{padding:26px 0 22px; display:flex; align-items:flex-end; justify-content:space-between; gap:20px; flex-wrap:wrap;}
+.prog-head-l h1{font-size:20px; font-weight:700; margin-bottom:5px;}
+.prog-head-l .prog-meta{font-size:12px; color:var(--text-tertiary); font-family:var(--font-mono); display:flex; gap:14px; align-items:center;}
+.prog-status-badge{
+  display:inline-flex; align-items:center; gap:7px; font-size:11.5px; font-weight:600; padding:6px 12px; border-radius:20px;
+  font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.04em;
+}
+.prog-status-badge.running{background:var(--blue-dim); color:var(--blue-bright); border:1px solid #234179;}
+.prog-status-badge.done{background:var(--green-dim); color:var(--green); border:1px solid #1E5C42;}
+.prog-status-badge .pulse{width:6px; height:6px; border-radius:50%; background:currentColor; animation:pulseDot 1.4s ease-in-out infinite;}
+@keyframes pulseDot{0%,100%{opacity:1;} 50%{opacity:0.3;}}
+
+.progressbar-wrap{margin-bottom:26px;}
+.progressbar-top{display:flex; justify-content:space-between; margin-bottom:8px; font-size:11.5px; color:var(--text-tertiary); font-family:var(--font-mono);}
+.progressbar{height:8px; border-radius:5px; background:var(--surface-raised); overflow:hidden; border:1px solid var(--border);}
+.progressbar-fill{height:100%; width:0%; border-radius:5px; background:linear-gradient(90deg, var(--blue), var(--cyan)); transition:width .5s ease; box-shadow:0 0 12px rgba(47,111,237,0.5);}
+
+.stats-row{display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:26px;}
+.stat-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px;}
+.stat-card .stat-label{font-size:11px; color:var(--text-tertiary); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; display:flex; align-items:center; gap:6px;}
+.stat-card .stat-label svg{width:12px; height:12px;}
+.stat-card .stat-value{font-size:26px; font-weight:700; font-family:var(--font-mono); letter-spacing:-0.02em;}
+.stat-card.stat-artifacts .stat-value{color:var(--text-primary);}
+.stat-card.stat-events .stat-value{color:var(--cyan);}
+.stat-card.stat-incidents .stat-value{color:var(--amber);}
+.stat-card.stat-iocs .stat-value{color:var(--blue-bright);}
+
+.prog-main{display:grid; grid-template-columns:340px 1fr; gap:20px; padding-bottom:60px; align-items:start;}
+
+/* pipeline — signature element */
+.pipeline-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:22px 22px 22px 26px;}
+.pipeline-card .card-title{margin-bottom:20px;}
+.pipeline{position:relative;}
+.pipe-stage{position:relative; padding-left:34px; padding-bottom:26px;}
+.pipe-stage:last-child{padding-bottom:0;}
+.pipe-line{position:absolute; left:9px; top:22px; bottom:-4px; width:2px; background:var(--border-strong); z-index:0;}
+.pipe-stage:last-child .pipe-line{display:none;}
+.pipe-line-fill{position:absolute; left:0; top:0; width:100%; height:0%; background:var(--green); transition:height .6s ease;}
+.pipe-node{
+  position:absolute; left:0; top:0; width:20px; height:20px; border-radius:50%;
+  background:var(--void); border:2px solid var(--border-strong); display:flex; align-items:center; justify-content:center;
+  z-index:1; transition:border-color .3s, background .3s;
+}
+.pipe-node svg{width:11px; height:11px; opacity:0; transition:opacity .2s;}
+.pipe-stage.done .pipe-node{border-color:var(--green); background:var(--green-dim);}
+.pipe-stage.done .pipe-node svg{opacity:1; color:var(--green);}
+.pipe-stage.running .pipe-node{border-color:var(--blue); background:var(--blue-dim); box-shadow:0 0 0 4px rgba(47,111,237,0.18);}
+.pipe-stage.running .pipe-node::after{
+  content:""; position:absolute; inset:-5px; border-radius:50%; border:1.5px solid var(--blue);
+  animation:ring 1.6s ease-out infinite;
+}
+@keyframes ring{0%{transform:scale(0.6); opacity:0.8;} 100%{transform:scale(1.6); opacity:0;}}
+.pipe-title{font-size:13px; font-weight:600; color:var(--text-tertiary); transition:color .3s;}
+.pipe-stage.done .pipe-title{color:var(--text-secondary);}
+.pipe-stage.running .pipe-title{color:var(--text-primary);}
+.pipe-sub{font-size:11px; color:var(--text-disabled); font-family:var(--font-mono); margin-top:3px; min-height:14px;}
+.pipe-stage.running .pipe-sub{color:var(--blue-bright);}
+.pipe-stage.done .pipe-sub{color:var(--text-tertiary);}
+
+/* console */
+.console-card{background:#080B10; border:1px solid var(--border); border-radius:var(--radius-lg); display:flex; flex-direction:column; height:100%; min-height:520px; overflow:hidden;}
+.console-bar{display:flex; align-items:center; justify-content:space-between; padding:13px 18px; border-bottom:1px solid var(--border-soft); background:var(--surface);}
+.console-bar-l{display:flex; align-items:center; gap:9px;}
+.console-dots{display:flex; gap:6px;}
+.console-dots span{width:9px; height:9px; border-radius:50%; background:var(--border-strong);}
+.console-title{font-family:var(--font-mono); font-size:11.5px; color:var(--text-tertiary); letter-spacing:0.03em;}
+.console-body{flex:1; padding:16px 18px; font-family:var(--font-mono); font-size:12.5px; line-height:1.85; overflow-y:auto; max-height:520px;}
+.log-line{display:flex; gap:10px; opacity:0; animation:logIn .3s forwards;}
+@keyframes logIn{to{opacity:1;}}
+.log-time{color:var(--text-disabled); flex-shrink:0;}
+.log-text{color:var(--mono-term);}
+.log-text.info{color:var(--text-secondary);}
+.log-text.warn{color:var(--amber);}
+.log-cursor{display:inline-block; width:7px; height:14px; background:var(--mono-term); margin-left:2px; animation:blink 1s step-end infinite; vertical-align:middle;}
+@keyframes blink{50%{opacity:0;}}
+
+.prog-footer{display:flex; justify-content:flex-end; padding-top:24px; gap:12px;}
+
+/* ============================================================
+   PAGE 5 — RESULTS
+   ============================================================ */
+.results-summary{
+  display:flex; align-items:center; gap:16px; padding:18px 22px; border-radius:var(--radius-lg);
+  background:linear-gradient(180deg, rgba(34,198,125,0.09), rgba(34,198,125,0.02)); border:1px solid #1E5C42; margin:26px 0 30px;
+}
+.results-summary-icon{width:42px; height:42px; border-radius:11px; background:var(--green-dim); border:1px solid #1E5C42; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+.results-summary-icon svg{width:22px; height:22px; color:var(--green);}
+.results-summary h2{font-size:15.5px; font-weight:700; margin-bottom:3px;}
+.results-summary p{font-size:12.5px; color:var(--text-secondary); font-family:var(--font-mono);}
+
+.results-grid{display:grid; grid-template-columns:1fr 1fr; gap:18px; padding-bottom:70px;}
+.results-grid .span-2{grid-column:span 2;}
+.result-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); padding:22px; display:flex; flex-direction:column;}
+.result-card.disabled{opacity:0.5;}
+.result-card-top{display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:14px;}
+.result-icon{width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+.result-icon svg{width:19px; height:19px;}
+.ri-dfir{background:var(--blue-dim); border:1px solid #234179; color:var(--blue-bright);}
+.ri-ioc{background:rgba(63,208,224,0.1); border:1px solid #1B5E68; color:var(--cyan);}
+.ri-haya{background:rgba(232,169,59,0.1); border:1px solid #6B5220; color:var(--amber);}
+.ri-timeline{background:var(--surface-raised); border:1px solid var(--border); color:var(--text-secondary);}
+.ri-mitre{background:rgba(229,72,77,0.08); border:1px solid #5C2328; color:#F0888C;}
+.result-tag{font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.05em; padding:4px 9px; border-radius:20px; border:1px solid var(--border); color:var(--text-tertiary);}
+.result-tag.not-run{color:var(--text-disabled);}
+.result-card h3{font-size:14.5px; font-weight:700; margin-bottom:6px;}
+.result-card .rc-desc{font-size:12.5px; color:var(--text-secondary); line-height:1.6; margin-bottom:18px; flex:1;}
+.result-meta-row{display:flex; gap:16px; margin-bottom:18px; padding:12px 14px; background:var(--void); border:1px solid var(--border-soft); border-radius:var(--radius-sm);}
+.result-meta{font-family:var(--font-mono); font-size:11px;}
+.result-meta .rm-label{color:var(--text-disabled); text-transform:uppercase; letter-spacing:0.04em; font-size:9.5px; margin-bottom:3px;}
+.result-meta .rm-value{color:var(--text-secondary); font-weight:600;}
+.rc-actions{display:flex; gap:10px; flex-wrap:wrap; margin-top:auto;}
+.rc-actions .btn{flex:1; min-width:120px;}
+
+.mitre-card{display:flex; gap:16px; align-items:flex-start;}
+.mitre-card .rc-desc{margin-bottom:0;}
+.mitre-note{
+  display:flex; gap:9px; align-items:flex-start; background:var(--void); border:1px solid var(--border-soft);
+  border-radius:var(--radius-sm); padding:12px 14px; margin-top:14px; font-size:12px; color:var(--text-tertiary);
+}
+.mitre-note svg{width:14px; height:14px; color:var(--blue-bright); flex-shrink:0; margin-top:1px;}
+
+/* toast */
+.toast{
+  position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px);
+  background:var(--surface-raised); border:1px solid var(--border-strong); border-radius:var(--radius);
+  padding:12px 18px; display:flex; align-items:center; gap:10px; box-shadow:var(--shadow-2);
+  font-size:12.5px; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; z-index:100;
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+.toast svg{width:15px; height:15px; color:var(--green);}
+
+/* focus visibility */
+button:focus-visible, input:focus-visible, textarea:focus-visible, .dropzone:focus-visible{
+  outline:2px solid var(--blue-bright); outline-offset:2px;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important;}
+}
+
+@media (max-width:980px){
+  .prog-main{grid-template-columns:1fr;}
+  .stats-row{grid-template-columns:repeat(2,1fr);}
+  .form-row{grid-template-columns:1fr;}
+  .actions-grid{grid-template-columns:1fr;}
+  .results-grid{grid-template-columns:1fr;}
+  .results-grid .span-2{grid-column:span 1;}
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     ICON SPRITE (inline defs reused via <use>)
+     ============================================================ -->
+<svg width="0" height="0" style="position:absolute">
+<defs>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M6 10l6-6 6 6"/><path d="M4 18v1a2 2 0 002 2h12a2 2 0 002-2v-1"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+  <symbol id="i-report" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h6M9 9h1"/></symbol>
+  <symbol id="i-ioc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></symbol>
+  <symbol id="i-arrow-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 10l6 6 6-6"/><path d="M4 18v1a2 2 0 002 2h12a2 2 0 002-2v-1"/></symbol>
+  <symbol id="i-radar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12A7 7 0 105 12"/><path d="M12 12L18 6"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></symbol>
+  <symbol id="i-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2a3 3 0 00-3 3v.3A3.5 3.5 0 004 8.5c0 .8.3 1.5.7 2.1A3 3 0 003 13.5 3 3 0 005.5 16.4 3.5 3.5 0 009 20h.5V2h-.03zM14.5 2a3 3 0 013 3v.3A3.5 3.5 0 0120 8.5c0 .8-.3 1.5-.7 2.1a3 3 0 011.7 2.9 3 3 0 01-2.5 2.9A3.5 3.5 0 0115 20h-.5V2h.03z"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-pdf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8.5 17v-3.5h1a1.5 1.5 0 010 3h-1"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M7 10V7a5 5 0 0110 0v3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></symbol>
+</defs>
+</svg>
+
+<!-- ============================================================
+     PAGE 1 — LOGIN
+     ============================================================ -->
+<section id="page-login" class="screen active">
+  <div class="login-card">
+    <div class="login-head">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none"><use href="#i-shield" stroke="#fff"/></svg></div>
+      <div class="brand-word">DFIR<b>·AI</b></div>
+      <div class="brand-sub">Forensic Investigation Platform</div>
+    </div>
+
+    <div class="login-error" id="loginError">
+      <svg viewBox="0 0 24 24"><use href="#i-alert"/></svg>
+      <span>Invalid username or password. Try again.</span>
+    </div>
+
+    <form id="loginForm" autocomplete="off">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" placeholder="analyst.name" value="a.moreau" required>
+      </div>
+      <div class="field" style="margin-bottom:22px;">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="••••••••••" value="••••••••••" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block btn-lg">
+        <svg viewBox="0 0 24 24"><use href="#i-lock"/></svg>
+        Sign in
+      </button>
+    </form>
+    <div class="login-foot">LOCAL INSTANCE · NO DATA LEAVES THIS HOST</div>
+  </div>
+</section>
+
+<!-- ============================================================
+     APP SHELL (post-login)
+     ============================================================ -->
+<div id="app" style="display:none;">
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="brand" style="cursor:pointer;" data-nav="home">
+        <div class="brand-mark"><svg viewBox="0 0 24 24" fill="none"><use href="#i-shield" stroke="#fff"/></svg></div>
+        <div class="brand-word">DFIR<b>·AI</b></div>
+      </div>
+      <div class="crumbs" id="crumbs">
+        <span class="current">Home</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" title="About"><svg viewBox="0 0 24 24"><use href="#i-info"/></svg></button>
+      <div class="user-chip">
+        <div class="user-avatar">AM</div>
+        <span class="user-name">a.moreau</span>
+      </div>
+      <button class="icon-btn" title="Sign out" id="btnLogout"><svg viewBox="0 0 24 24"><use href="#i-logout"/></svg></button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       PAGE 2 — HOME
+       ============================================================ -->
+  <section id="page-home" class="screen">
+    <div class="shell">
+      <div class="home-eyebrow"><span class="dot"></span> Engine ready · local analysis node</div>
+      <h1 class="home-title">Welcome back, <span>Analyst Moreau</span></h1>
+      <p class="home-desc">
+        DFIR-AI parses, normalizes, and correlates <b>Windows forensic evidence collected with KAPE or FastIR</b>,
+        then produces an AI-drafted incident narrative — timeline, IOCs, and MITRE ATT&CK mapping included.
+        Upload a triage archive to begin.
+      </p>
+      <div class="home-cta">
+        <button class="btn btn-primary big-cta" data-nav="new">
+          <svg viewBox="0 0 24 24"><use href="#i-bolt"/></svg>
+          New investigation
+        </button>
+        <div class="home-cta-hint">Accepts .zip archives from KAPE or FastIR collection</div>
+      </div>
+      <div class="home-sources">
+        <div class="source-pill"><svg viewBox="0 0 24 24"><use href="#i-layers"/></svg> KAPE triage</div>
+        <div class="source-pill"><svg viewBox="0 0 24 24"><use href="#i-layers"/></svg> FastIR collector</div>
+        <div class="source-pill"><svg viewBox="0 0 24 24"><use href="#i-cpu"/></svg> Fully local processing</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PAGE 3 — NEW INVESTIGATION
+       ============================================================ -->
+  <section id="page-new" class="screen">
+    <div class="shell">
+      <div class="page-head">
+        <h1>New investigation</h1>
+        <p>Provide case details and upload the evidence archive collected from the target host.</p>
+      </div>
+
+      <div class="ni-grid">
+        <div class="card card-pad">
+          <div class="card-title"><svg viewBox="0 0 24 24"><use href="#i-file"/></svg> Case details</div>
+          <div class="card-subtitle">Used to label the report and audit trail.</div>
+
+          <div class="form-row">
+            <div class="field">
+              <label for="invName">Investigation name</label>
+              <input type="text" id="invName" placeholder="e.g. INC-2026-0142 — Workstation compromise">
+            </div>
+            <div class="field">
+              <label for="invAnalyst">Analyst name <span style="color:var(--text-disabled); font-weight:400;">(optional)</span></label>
+              <input type="text" id="invAnalyst" placeholder="e.g. A. Moreau">
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label for="invDesc">Description</label>
+            <textarea id="invDesc" rows="3" placeholder="Brief context: how the host was flagged, suspected activity, time window…"></textarea>
+          </div>
+        </div>
+
+        <div class="card card-pad">
+          <div class="card-title"><svg viewBox="0 0 24 24"><use href="#i-upload"/></svg> Evidence archive</div>
+          <div class="card-subtitle">Drop a KAPE or FastIR collection .zip, or browse your filesystem.</div>
+
+          <div class="dropzone" id="dropzone" tabindex="0">
+            <div class="dropzone-icon"><svg viewBox="0 0 24 24"><use href="#i-upload"/></svg></div>
+            <h3>Drag &amp; drop evidence archive here</h3>
+            <p>or <span class="browse">browse files</span> from this computer</p>
+            <div class="dropzone-formats">
+              <span class="format-tag">.ZIP</span>
+              <span class="format-tag">KAPE</span>
+              <span class="format-tag">FastIR</span>
+            </div>
+          </div>
+          <input type="file" id="fileInput" accept=".zip" style="display:none">
+
+          <div class="file-picked" id="filePicked">
+            <div class="file-picked-icon"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg></div>
+            <div class="file-picked-meta">
+              <div class="file-picked-name" id="filePickedName">evidence_HOSTNAME.zip</div>
+              <div class="file-picked-sub" id="filePickedSub">— MB · Ready for analysis</div>
+            </div>
+            <button class="file-picked-remove" id="btnClearFile"><svg viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
+          </div>
+        </div>
+
+        <div class="card actions-card card-pad">
+          <div class="card-title"><svg viewBox="0 0 24 24"><use href="#i-cpu"/></svg> Run analysis</div>
+          <div class="card-subtitle">Choose which pipeline to execute against the uploaded evidence.</div>
+
+          <div class="actions-grid">
+            <button class="action-btn action-primary" id="btnDfir" disabled data-run="dfir">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><use href="#i-report"/></svg></div>
+              <h4>Generate DFIR report</h4>
+              <p>Full pipeline: evidence parsing → normalization → timeline → correlation → AI investigation → MITRE ATT&CK → PDF report.</p>
+              <div class="a-arrow">RUN FULL PIPELINE <svg viewBox="0 0 24 24"><use href="#i-arrow-r"/></svg></div>
+            </button>
+
+            <button class="action-btn action-secondary" id="btnIoc" disabled data-run="ioc">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><use href="#i-ioc"/></svg></div>
+              <h4>Generate IOC report</h4>
+              <p>Runs only the IOC extraction module and produces a standalone indicators-of-compromise report.</p>
+              <div class="a-arrow">RUN IOC EXTRACTION <svg viewBox="0 0 24 24"><use href="#i-arrow-r"/></svg></div>
+            </button>
+
+            <button class="action-btn action-secondary" id="btnHaya" disabled data-run="haya">
+              <div class="a-icon"><svg viewBox="0 0 24 24"><use href="#i-radar"/></svg></div>
+              <h4>Run Hayabusa analysis</h4>
+              <p>Runs Hayabusa against the uploaded Windows Event Logs and generates detection results.</p>
+              <div class="a-arrow">RUN HAYABUSA <svg viewBox="0 0 24 24"><use href="#i-arrow-r"/></svg></div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PAGE 4 — INVESTIGATION PROGRESS
+       ============================================================ -->
+  <section id="page-progress" class="screen">
+    <div class="shell">
+      <div class="prog-head">
+        <div class="prog-head-l">
+          <h1 id="progTitle">Investigation in progress</h1>
+          <div class="prog-meta">
+            <span id="progRunLabel">Full DFIR pipeline</span>
+            <span>·</span>
+            <span><svg viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:-1px;"><use href="#i-clock"/></svg> <span id="elapsed">00:00</span> elapsed</span>
+          </div>
+        </div>
+        <div class="prog-status-badge running" id="progBadge"><span class="pulse"></span> <span id="progBadgeText">Running</span></div>
+      </div>
+
+      <div class="progressbar-wrap">
+        <div class="progressbar-top">
+          <span id="progStageLabel">Initializing…</span>
+          <span id="progPercent">0%</span>
+        </div>
+        <div class="progressbar"><div class="progressbar-fill" id="progFill"></div></div>
+      </div>
+
+      <div class="stats-row" id="statsRow">
+        <div class="stat-card stat-artifacts">
+          <div class="stat-label"><svg viewBox="0 0 24 24"><use href="#i-layers"/></svg> Artifacts discovered</div>
+          <div class="stat-value" id="statArtifacts">0</div>
+        </div>
+        <div class="stat-card stat-events">
+          <div class="stat-label"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg> Parsed events</div>
+          <div class="stat-value" id="statEvents">0</div>
+        </div>
+        <div class="stat-card stat-incidents">
+          <div class="stat-label"><svg viewBox="0 0 24 24"><use href="#i-alert"/></svg> <span id="statIncidentsLabel">Generated incidents</span></div>
+          <div class="stat-value" id="statIncidents">0</div>
+        </div>
+        <div class="stat-card stat-iocs">
+          <div class="stat-label"><svg viewBox="0 0 24 24"><use href="#i-ioc"/></svg> Extracted IOCs</div>
+          <div class="stat-value" id="statIocs">0</div>
+        </div>
+      </div>
+
+      <div class="prog-main">
+        <div class="pipeline-card">
+          <div class="card-title"><svg viewBox="0 0 24 24"><use href="#i-cpu"/></svg> Pipeline stages</div>
+          <div class="pipeline" id="pipeline"></div>
+        </div>
+
+        <div class="console-card">
+          <div class="console-bar">
+            <div class="console-bar-l">
+              <div class="console-dots"><span></span><span></span><span></span></div>
+              <div class="console-title">dfir-ai · engine.log</div>
+            </div>
+            <div class="console-title" id="consoleCount">0 lines</div>
+          </div>
+          <div class="console-body" id="consoleBody"></div>
+        </div>
+      </div>
+
+      <div class="prog-footer">
+        <button class="btn btn-secondary" id="progCancelBtn" data-nav="new">Back to setup</button>
+        <button class="btn btn-primary" id="progViewResults" style="display:none;" data-nav="results">
+          View results <svg viewBox="0 0 24 24"><use href="#i-arrow-r"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PAGE 5 — INVESTIGATION RESULTS
+       ============================================================ -->
+  <section id="page-results" class="screen">
+    <div class="shell">
+      <div class="page-head" style="padding-bottom:0;">
+        <h1 id="resTitle">Investigation results</h1>
+        <p id="resSubtitle">Case artifacts generated by the analysis pipeline.</p>
+      </div>
+
+      <div class="results-summary">
+        <div class="results-summary-icon"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg></div>
+        <div>
+          <h2 id="resSummaryTitle">Analysis complete</h2>
+          <p id="resSummaryMeta">Completed in 00:00 · a.moreau</p>
+        </div>
+      </div>
+
+      <div class="results-grid">
+
+        <div class="result-card" id="cardDfir">
+          <div class="result-card-top">
+            <div class="result-icon ri-dfir"><svg viewBox="0 0 24 24"><use href="#i-report"/></svg></div>
+            <span class="result-tag" id="tagDfir">Generated</span>
+          </div>
+          <h3>DFIR report</h3>
+          <p class="rc-desc">Full incident narrative drafted by the Investigation AI module, including root cause, host timeline highlights, and MITRE ATT&CK mapping.</p>
+          <div class="result-meta-row">
+            <div class="result-meta"><div class="rm-label">Pages</div><div class="rm-value">18</div></div>
+            <div class="result-meta"><div class="rm-label">Incidents</div><div class="rm-value">3</div></div>
+            <div class="result-meta"><div class="rm-label">Format</div><div class="rm-value">PDF</div></div>
+          </div>
+          <div class="rc-actions">
+            <button class="btn btn-secondary"><svg viewBox="0 0 24 24"><use href="#i-eye"/></svg> Preview</button>
+            <button class="btn btn-primary" data-download="DFIR_Report.pdf"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> Download PDF</button>
+          </div>
+        </div>
+
+        <div class="result-card" id="cardIoc">
+          <div class="result-card-top">
+            <div class="result-icon ri-ioc"><svg viewBox="0 0 24 24"><use href="#i-ioc"/></svg></div>
+            <span class="result-tag" id="tagIoc">Generated</span>
+          </div>
+          <h3>IOC report</h3>
+          <p class="rc-desc">Indicators of compromise extracted from parsed artifacts — file hashes, IPs, domains, registry paths, and persistence markers.</p>
+          <div class="result-meta-row">
+            <div class="result-meta"><div class="rm-label">IOCs</div><div class="rm-value" id="metaIocCount">146</div></div>
+            <div class="result-meta"><div class="rm-label">High conf.</div><div class="rm-value">39</div></div>
+            <div class="result-meta"><div class="rm-label">Format</div><div class="rm-value">PDF</div></div>
+          </div>
+          <div class="rc-actions">
+            <button class="btn btn-secondary"><svg viewBox="0 0 24 24"><use href="#i-eye"/></svg> Preview</button>
+            <button class="btn btn-primary" data-download="IOC_Report.pdf"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> Download PDF</button>
+          </div>
+        </div>
+
+        <div class="result-card" id="cardHaya">
+          <div class="result-card-top">
+            <div class="result-icon ri-haya"><svg viewBox="0 0 24 24"><use href="#i-radar"/></svg></div>
+            <span class="result-tag" id="tagHaya">Generated</span>
+          </div>
+          <h3>Hayabusa results</h3>
+          <p class="rc-desc">Sigma-rule detections from Windows Event Logs, ranked by severity with rule name, channel, and timestamp.</p>
+          <div class="result-meta-row">
+            <div class="result-meta"><div class="rm-label">Detections</div><div class="rm-value" id="metaHayaCount">58</div></div>
+            <div class="result-meta"><div class="rm-label">Critical</div><div class="rm-value">4</div></div>
+            <div class="result-meta"><div class="rm-label">Channels</div><div class="rm-value">12</div></div>
+          </div>
+          <div class="rc-actions">
+            <button class="btn btn-secondary"><svg viewBox="0 0 24 24"><use href="#i-eye"/></svg> View results</button>
+            <button class="btn btn-secondary" data-download="Hayabusa_Results.csv"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> CSV</button>
+            <button class="btn btn-secondary" data-download="Hayabusa_Results.json"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> JSON</button>
+          </div>
+        </div>
+
+        <div class="result-card" id="cardTimeline">
+          <div class="result-card-top">
+            <div class="result-icon ri-timeline"><svg viewBox="0 0 24 24"><use href="#i-clock"/></svg></div>
+            <span class="result-tag" id="tagTimeline">Generated</span>
+          </div>
+          <h3>Timeline</h3>
+          <p class="rc-desc">The full super-timeline can reach millions of events and isn't rendered here — download the structured JSON for offline analysis or ingestion into your own tooling.</p>
+          <div class="result-meta-row">
+            <div class="result-meta"><div class="rm-label">Events</div><div class="rm-value" id="metaTimelineCount">2.18M</div></div>
+            <div class="result-meta"><div class="rm-label">Span</div><div class="rm-value">41 days</div></div>
+            <div class="result-meta"><div class="rm-label">Format</div><div class="rm-value">JSON</div></div>
+          </div>
+          <div class="rc-actions">
+            <button class="btn btn-primary btn-block" data-download="Timeline.json"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> Download timeline JSON</button>
+          </div>
+        </div>
+
+        <div class="result-card mitre-card span-2" id="cardMitre">
+          <div class="result-icon ri-mitre"><svg viewBox="0 0 24 24"><use href="#i-target"/></svg></div>
+          <div style="flex:1;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <h3>MITRE ATT&amp;CK mapping</h3>
+              <span class="result-tag" id="tagMitre">Included in DFIR report</span>
+            </div>
+            <p class="rc-desc">Techniques and tactics identified during correlation are mapped automatically by the Investigation AI module.</p>
+            <div class="mitre-note">
+              <svg viewBox="0 0 24 24"><use href="#i-info"/></svg>
+              <span>There's no separate MITRE page — mapping is embedded directly inside the DFIR report's incident narrative, alongside the technique IDs and evidence references.</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast">
+  <svg viewBox="0 0 24 24"><use href="#i-check"/></svg>
+  <span id="toastText">Download started</span>
+</div>
+
+<script src="./static/router.js" defer></script>
+<script src="./static/login.js" defer></script>
+<script src="./static/new_case.js" defer></script>
+<script src="./static/progress.js" defer></script>
+<script src="./static/results.js" defer></script>
+<script src="./static/api.js" defer></script>
+<script src="./static/app.js" defer></script>
+</body>
+</html>
