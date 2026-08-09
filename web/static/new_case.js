@@ -3,11 +3,10 @@
    "New investigation" page: file drop/browse, form validation,
    and launchPipeline() — the single entry point that starts a run.
 
-   launchPipeline() only sets up the progress-page UI and hands off
-   to runSimulatedPipeline() (progress.js). NEXT INCREMENT: replace
-   the runSimulatedPipeline(pipeline) call at the bottom with
-   POST /api/report | /api/ioc | /api/hayabusa, then poll
-   GET /api/status/{job_id}. Nothing else in this file changes.
+   launchPipeline() sets up the progress-page UI and hands off to
+   runRealPipeline(runType, pipeline) (progress.js), which POSTs
+   /api/report or /api/ioc, polls GET /api/status/{job_id}, and on
+   completion stores the real result paths on `state` for results.js.
 
    Uses the shared `state` object declared in app.js.
    ------------------------------------------------------------ */
@@ -140,5 +139,5 @@ function launchPipeline(runType) {
     $('elapsed').textContent = m + ':' + s;
   }, 500);
 
-  runSimulatedPipeline(pipeline);
+  runRealPipeline(runType, pipeline);
 }

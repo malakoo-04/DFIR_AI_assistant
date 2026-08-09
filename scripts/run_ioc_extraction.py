@@ -58,7 +58,19 @@ def _fail(stage: str, error: Exception) -> None:
     sys.exit(1)
 
 
-def main() -> None:
+def generate_ioc_report() -> dict | None:
+    """
+    Run the deterministic pipeline + IOC extraction agent end-to-end
+    and return the output path.
+
+    Extracted from main() unchanged (same steps, same order, same
+    prints, same failure handling) so it can be called directly by
+    non-CLI callers such as the FastAPI layer.
+
+    Returns:
+        {"ioc_report": OUTPUT_PATH} on success, or None if no
+        incidents were generated (mirrors the original early-return).
+    """
     scanner = DiscoveryEngine(DATASET_PATH)
     artifacts = scanner.scan()
     inventory = Inventory()
@@ -106,7 +118,7 @@ def main() -> None:
     print(f"Incidents generated: {len(serialized_incidents)}")
     if not serialized_incidents:
         print("No incidents -- nothing to send to the model.")
-        return
+        return None
 
     # INVENTORY CONTEXT
     extractor = InventoryContextExtractor()
@@ -167,6 +179,15 @@ def main() -> None:
 
     export_json(result.report, OUTPUT_PATH)
     print(f"\nSaved validated IOC report to {OUTPUT_PATH}")
+
+    return {"ioc_report": OUTPUT_PATH}
+
+
+def main() -> None:
+    """CLI entry point. Unchanged behavior: `python -m scripts.run_ioc_extraction`
+    (or `python scripts/run_ioc_extraction.py`) still just runs the pipeline
+    and prints exactly what it printed before."""
+    generate_ioc_report()
 
 
 if __name__ == "__main__":

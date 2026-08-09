@@ -4,12 +4,59 @@
    called from progress.js once a run completes.
    ============================================================ */
 
+// Maps a result-card id to the artifact key used in
+// GET /api/result/{job_id} / GET /api/file/{job_id}/{artifact_key}.
+// Only DFIR and IOC reports are backed by real files today; Hayabusa
+// and Timeline stay on the mock download until those pipelines exist.
+const CARD_ARTIFACT_KEY = {
+  cardDfir: 'final_report',
+  cardIoc: 'ioc_report',
+};
+
+function artifactKeyForButton(btn) {
+  const card = btn.closest('.result-card');
+  return card ? CARD_ARTIFACT_KEY[card.id] : null;
+}
+
+function hasRealFile(key) {
+  return !!(key && state.jobId && state.resultPaths && state.resultPaths[key]);
+}
+
 function initResults() {
   document.querySelectorAll('[data-download]').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      mockDownload(btn.dataset.download);
+      const key = artifactKeyForButton(btn);
+      if (hasRealFile(key)) {
+        realDownload(key);
+      } else {
+        mockDownload(btn.dataset.download);
+      }
     });
   });
+
+  // "Preview" / "View results" buttons (the eye icon) have no
+  // data-download attribute and were previously inert. Wire the DFIR
+  // and IOC ones to open the real generated file in a new tab.
+  document.querySelectorAll('.rc-actions .btn').forEach(function (btn) {
+    const use = btn.querySelector('svg use');
+    if (!use || use.getAttribute('href') !== '#i-eye') return;
+    btn.addEventListener('click', function () {
+      const key = artifactKeyForButton(btn);
+      if (hasRealFile(key)) {
+        window.open('/api/file/' + state.jobId + '/' + key, '_blank');
+      }
+    });
+  });
+}
+
+function realDownload(key) {
+  const url = '/api/file/' + state.jobId + '/' + key;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function prepareResults(pipeline) {

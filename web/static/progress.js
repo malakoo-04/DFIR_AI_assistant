@@ -2,18 +2,23 @@
    progress.js — DFIR-AI frontend
    "Investigation progress" page.
 
-   PIPELINES + runSimulatedPipeline() below is PLACEHOLDER data
-   simulating backend execution with setInterval and canned log
-   lines. It exists only so the GUI is fully clickable today.
+   PIPELINES holds the cosmetic stage/log/stat data used to drive the
+   stage timeline and console while a job is running — the backend
+   doesn't report fine-grained per-stage progress, so this is what
+   fills the UI in between "job started" and "job finished".
 
-   NEXT INCREMENT replaces runSimulatedPipeline(pipeline) with:
-     - POST /api/report | /api/ioc | /api/hayabusa  (kick off run,
-       called from launchPipeline() in new_case.js)
-     - GET  /api/status/{job_id}                     (poll progress,
-       feeding the same markStage/appendLog/stat calls below)
-     - GET  /api/result/{job_id}                      (final artifacts)
-   The stage DOM, the console DOM and the stat DOM stay exactly as
-   they are — only where the numbers come from changes.
+   launchPipeline() (new_case.js) calls runRealPipeline(runType,
+   pipeline) for 'dfir' and 'ioc': it POSTs /api/report or /api/ioc,
+   then polls GET /api/status/{job_id} until the real job completes
+   or fails, while the cosmetic animation (same stage DOM / console
+   DOM / stat DOM as before) plays underneath, capped just short of
+   100% so it never claims "done" before the backend actually is.
+   Once the real job completes, GET /api/result/{job_id} supplies the
+   real output paths, stored on `state` for results.js.
+
+   runSimulatedPipeline() is kept as-is and still used for 'haya'
+   (POST /api/hayabusa is a not-yet-implemented placeholder — see
+   runRealPipeline's haya branch below).
    ------------------------------------------------------------ */
 
 // Stage-id helpers — every stage renders three DOM ids derived from
@@ -192,6 +197,133 @@ function runSimulatedPipeline(pipeline) {
       // a new .onclick — Router's generic listener re-reads
       // dataset.nav on every click, so just changing the attribute
       // is enough.
+      cancelBtn.dataset.nav = 'home';
+
+      clearInterval(state.elapsedTimer);
+      prepareResults(pipeline);
+    }
+  }, 120);
+}
+
+/* ------------------------------------------------------------
+   Real pipeline runner — dfir / ioc.
+   Kicks off the actual backend job, then drives the exact same
+   stage/console/stat UI as runSimulatedPipeline() while polling
+   GET /api/status/{job_id}. Progress is cosmetic (capped at 92%)
+   until the backend reports "completed"; only then do we jump to
+   100%, mark everything done, and hand off to prepareResults().
+   ------------------------------------------------------------ */
+function runRealPipeline(runType, pipeline) {
+  const endpoint = runType === 'dfir' ? '/api/report'
+    : runType === 'ioc' ? '/api/ioc'
+    : '/api/hayabusa';
+
+  const totalDuration = pipeline.duration;
+  const stages = pipeline.stages;
+  const nStages = stages.length;
+  let currentStageIdx = -1;
+  let logIdx = 0;
+  const startedAt = Date.now();
+  let loggedCount = 0;
+
+  let jobId = null;
+  let jobDone = false;
+  let jobFailed = false;
+  let jobErrorMsg = null;
+
+  function fail(message) {
+    jobFailed = true;
+    jobErrorMsg = message;
+  }
+
+  function pollStatus() {
+    apiGet('/api/status/' + jobId).then(function (res) {
+      if (res.status === 'completed') {
+        return apiGet('/api/result/' + jobId).then(function (result) {
+          state.jobId = jobId;
+          state.resultPaths = result;
+          jobDone = true;
+        });
+      }
+      if (res.status === 'failed') {
+        fail('Pipeline failed on the server. Check the API logs for details.');
+        return;
+      }
+      // queued | running — keep polling.
+      setTimeout(pollStatus, 2000);
+    }).catch(function (err) {
+      fail('Lost contact with the API: ' + err.message);
+    });
+  }
+
+  apiPost(endpoint, {}).then(function (res) {
+    if (res.status === 'not_implemented') {
+      fail('Hayabusa backend is not implemented yet.');
+      return;
+    }
+    jobId = res.job_id;
+    pollStatus();
+  }).catch(function (err) {
+    fail('Could not start the job: ' + err.message);
+  });
+
+  clearInterval(state.timer);
+  state.timer = setInterval(function () {
+    const elapsed = Date.now() - startedAt;
+    // Cosmetic progress never reaches 100% on its own — it waits
+    // for the real job to report completion.
+    const progress = jobDone ? 1 : Math.min(elapsed / totalDuration, 0.92);
+
+    $('progFill').style.width = (progress * 100).toFixed(0) + '%';
+    $('progPercent').textContent = Math.round(progress * 100) + '%';
+
+    const targetStageIdx = Math.min(Math.floor(progress * nStages), nStages - 1);
+    if (targetStageIdx > currentStageIdx) {
+      markStage(targetStageIdx, stages, progress >= 1);
+      currentStageIdx = targetStageIdx;
+      $('progStageLabel').textContent = jobDone ? 'Complete' : stages[currentStageIdx].title + '…';
+    }
+
+    const st = pipeline.stats;
+    $('statArtifacts').textContent =
+      Math.round(st.artifacts * Math.min(progress * 2.2, 1)).toLocaleString();
+    $('statEvents').textContent =
+      Math.round(st.events * Math.max(0, Math.min((progress - 0.25) * 1.6, 1))).toLocaleString();
+    $('statIncidents').textContent =
+      Math.round(st.incidents * Math.max(0, Math.min((progress - 0.6) * 2.6, 1))).toLocaleString();
+    $('statIocs').textContent =
+      Math.round(st.iocs * Math.max(0, Math.min((progress - 0.55) * 2.3, 1))).toLocaleString();
+
+    while (logIdx < pipeline.logs.length && pipeline.logs[logIdx].t <= progress) {
+      appendLog(pipeline.logs[logIdx]);
+      logIdx++;
+      loggedCount++;
+      $('consoleCount').textContent = loggedCount + ' lines';
+    }
+
+    if (jobFailed) {
+      clearInterval(state.timer);
+      clearInterval(state.elapsedTimer);
+      appendLog({ msg: jobErrorMsg || 'Pipeline failed.', cls: 'warn' });
+      $('progStageLabel').textContent = 'Failed';
+      $('progBadgeText').textContent = 'Failed';
+
+      const cancelBtn = $('progCancelBtn');
+      cancelBtn.textContent = 'Back to setup';
+      cancelBtn.dataset.nav = 'new';
+      return;
+    }
+
+    if (jobDone) {
+      clearInterval(state.timer);
+      stages.forEach(function (s) { setStageDone(s.id); });
+      $('progStageLabel').textContent = 'Complete';
+      $('progBadge').className = 'prog-status-badge done';
+      $('progBadgeText').textContent = 'Complete';
+      $('progViewResults').style.display = 'inline-flex';
+
+      const cancelBtn = $('progCancelBtn');
+      cancelBtn.textContent = 'Back to home';
       cancelBtn.dataset.nav = 'home';
 
       clearInterval(state.elapsedTimer);

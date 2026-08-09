@@ -98,7 +98,24 @@ def _fail(stage: str, error: Exception) -> None:
     sys.exit(1)
 
 
-def main():
+def generate_final_report():
+    """
+    Run the full DFIR pipeline end-to-end (Discovery ... Final Report
+    Agent) and return the output paths.
+
+    This is the exact body that used to live directly in main(). It
+    has only been extracted into a named, callable function so
+    non-CLI callers (the FastAPI layer, notebooks, other scripts) can
+    invoke it directly instead of going through `python -m
+    scripts.run_final_report`. No behavior was changed: same steps,
+    same order, same prints, same failure handling (_fail still calls
+    sys.exit(1) on unrecoverable errors, exactly as before).
+
+    Returns:
+        dict with "investigation_report", "ioc_report" and
+        "final_report" output paths on success, or None if no
+        incidents were generated (mirrors the original early-return).
+    """
 
     ##############################################################
     # DISCOVERY
@@ -273,7 +290,7 @@ def main():
             "No incidents generated."
         )
 
-        return
+        return None
 
     #################################################################
     # PART 2 STARTS HERE
@@ -498,6 +515,19 @@ def main():
     print(f"Investigation : {INVESTIGATION_OUTPUT}")
     print(f"IOC           : {IOC_OUTPUT}")
     print(f"Final Report  : {FINAL_REPORT_OUTPUT}")
+
+    return {
+        "investigation_report": INVESTIGATION_OUTPUT,
+        "ioc_report": IOC_OUTPUT,
+        "final_report": FINAL_REPORT_OUTPUT,
+    }
+
+
+def main():
+    """CLI entry point. Unchanged behavior: `python -m scripts.run_final_report`
+    (or `python scripts/run_final_report.py`) still just runs the pipeline
+    and prints exactly what it printed before."""
+    generate_final_report()
 
 
 if __name__ == "__main__":
