@@ -77,7 +77,7 @@ class IncidentAnalysisAgent:
     def __init__(
         self,
         prompt_builder: IncidentAnalysisPromptBuilder | None = None,
-        model_name: str = "qwen2.5:7b",
+        model_name: str = "gemini-3.5-flash",
         temperature: float = 0.0,
         ollama_host: str = "http://localhost:11434",
         timeout_seconds: float = 180.0,

@@ -15,6 +15,20 @@ from modules.correlation.rules.usb_connection import USBConnectionRule
 from modules.correlation.rules.browser_activity import BrowserActivityRule
 from modules.correlation.rules.browser_download_execution import BrowserDownloadExecutionRule
 from modules.correlation.rules.powershell_execution import PowerShellExecutionRule
+from modules.correlation.incident_graph import IncidentGraphBuilder
+from modules.correlation.incident_builder import IncidentCandidateBuilder
+from modules.correlation.incident_enricher import IncidentEnricher
+from modules.correlation.incident_serializer import IncidentSerializer
+from modules.correlation.incident_prioritizer import IncidentPrioritizer
+from modules.correlation.attack_chain_builder import AttackChainBuilder
+
+from modules.inventory.context_extractor import InventoryContextExtractor
+from modules.inventory.context_builder import InventoryContextBuilder
+
+from modules.llm.investigation_analysis_agent import InvestigationAnalysisAgent
+from modules.llm.ioc_extraction_agent import IOCExtractionAgent
+
+import os
 from modules.utils.json_export import export_json
 from dataclasses import asdict
 import json
@@ -112,6 +126,109 @@ correlation_engine = CorrelationEngine(
 
 correlations = correlation_engine.run(timeline)
 
+# ============================================================
+# INCIDENT BUILDING
+# ============================================================
+
+graph_edges = IncidentGraphBuilder().build(correlations)
+
+incidents = IncidentCandidateBuilder().build(
+    correlations,
+    graph_edges,
+)
+
+incidents = IncidentEnricher().enrich(
+    incidents,
+    correlations,
+)
+
+serialized_incidents = IncidentSerializer().serialize(
+    incidents,
+    correlations,
+)
+
+prioritized_incidents = IncidentPrioritizer().prioritize(
+    serialized_incidents
+)
+
+attack_chain = AttackChainBuilder().build(
+    prioritized_incidents
+)
+
+# ============================================================
+# INVENTORY CONTEXT
+# ============================================================
+
+extractor = InventoryContextExtractor()
+
+unparsed_recognized_artifacts = []
+
+for artifact in artifacts:
+    if parser_manager.get_parser(artifact.artifact_type) is None:
+        unparsed_recognized_artifacts.append(artifact)
+
+extracted = [
+    extractor.extract(path)
+    for path in scanner.unknown_files
+]
+
+extracted.extend(
+    extractor.extract(artifact)
+    for artifact in unparsed_recognized_artifacts
+)
+
+inventory_context = InventoryContextBuilder().build(
+    extracted
+)
+
+# ============================================================
+# AGENT 1
+# Investigation Analysis
+# ============================================================
+
+analysis_agent = InvestigationAnalysisAgent()
+
+analysis_result = analysis_agent.analyze(
+    prioritized_incidents,
+    timeline,
+    inventory_context,
+    attack_chain,
+)
+
+os.makedirs("output/reports", exist_ok=True)
+
+with open(
+    "output/reports/investigation_report.md",
+    "w",
+    encoding="utf-8",
+) as f:
+    f.write(analysis_result.text)
+
+print("\nInvestigation report generated.")
+
+# ============================================================
+# AGENT 2
+# IOC Extraction
+# ============================================================
+
+ioc_agent = IOCExtractionAgent()
+
+ioc_result = ioc_agent.extract(
+    prioritized_incidents,
+    timeline,
+    inventory_context,
+    attack_chain,
+)
+
+os.makedirs("output/iocs", exist_ok=True)
+
+export_json(
+    ioc_result.report,
+    "output/iocs/ioc_report.json",
+)
+
+print("IOC report generated.")
+
 export_json(
     [asdict(c) for c in correlations],
     "output/correlation/correlations.json",
@@ -159,14 +276,7 @@ print("\nSkipped by reason:")
 
 for reason, count in report["skipped_by_reason"].items():
     print(f"  {reason:<30} {count}")
-"""
-report = timeline_builder.last_report
 
-for reason, samples in report["skipped_samples"].items():
-    print(f"\n===== {reason} =====")
-
-    for sample in samples:
-        print(sample)"""
 
 counter=Counter(
     (event["artifact_type"], event["event_type"])

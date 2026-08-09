@@ -146,7 +146,19 @@ class InvestigationAnalysisPromptBuilder:
             "- If the evidence is insufficient or too ambiguous to support",
             "  a reliable conclusion, say so explicitly instead of",
             "  guessing.",
-        ]
+            """- Express conclusions proportionally to the available evidence.
+
+            - Prefer evidence-based wording such as:
+
+            • "The collected evidence indicates..."
+            • "The forensic artefacts suggest..."
+            • "The available evidence supports..."
+            • "The investigation identified..."
+
+            - Avoid absolute statements unless they are directly proven by the supplied evidence.
+
+            - If uncertainty exists, explicitly explain what is known, what is unknown, and why."""
+                    ]
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
@@ -594,7 +606,53 @@ Only facts explicitly contained inside the supplied correlations may appear in t
 
 8. Never infer persistence unless a persistence correlation exists.
 
-9. Unknown is always preferable to guessing."""
+9. Unknown is always preferable to guessing.
+"""
+"",
+"""10. Include a dedicated section titled "MITRE ATT&CK Mapping".
+
+11. Only report techniques explicitly present in the supplied correlations.
+
+12. Present this section as a table with the following columns:
+
+- Technique ID
+- Technique Name
+- ATT&CK Tactic
+- Supporting Incident(s)
+- Supporting Correlation(s)
+- Explanation
+
+13. Each explanation must describe only why the supplied forensic evidence supports the technique.
+
+14. Never infer additional ATT&CK techniques.
+
+15. If no ATT&CK techniques are supplied in the evidence, explicitly state that no mapping could be established.""",
+"""
+### Suspicious Behaviors
+
+Create a dedicated section titled "Suspicious Behaviors".
+
+Each behavior must contain:
+
+- Behavior
+- Confidence (High / Medium / Low)
+- Supporting Incident(s)
+- Supporting Correlation(s)
+- Explanation
+
+Do not invent behaviors.
+
+Only combine observations already supported by multiple supplied incidents or correlations.
+
+If no suspicious behavior beyond the reconstructed attack can be justified, explicitly state that none were identified.
+
+"""
+"""15. Before writing the report:
+
+- Remove duplicated conclusions.
+- Merge duplicated evidence.
+- Prefer one complete explanation instead of repeating the same information in multiple sections.
+- Keep the report concise while preserving all important forensic findings."""
         ]
 
         

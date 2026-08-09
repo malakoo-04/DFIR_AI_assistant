@@ -5,9 +5,9 @@ from datetime import timedelta
 from modules.correlation.incident_models import IncidentCandidate
 
 MIN_CONFIDENCE = 0.55
-MIN_PRIMARY_CORRELATIONS = 2
-MIN_EVENTS = 3
-MIN_DURATION = timedelta(seconds=2)
+MIN_PRIMARY_CORRELATIONS = 3
+MIN_EVENTS = 5
+MIN_DURATION = timedelta(seconds=10)
 
 CONTEXTUAL_RULES = {
     "browser_activity",
@@ -17,18 +17,12 @@ CONTEXTUAL_RULES = {
 
 
 class IncidentFilter:
-    """
-    Remove weak incidents before they ever reach the LLM.
-
-    This module never modifies an incident.
-    It simply decides whether it is worth keeping.
-    """
+    """Remove weak incidents before they ever reach the LLM."""
 
     def filter(
         self,
         incidents: list[IncidentCandidate],
     ) -> list[IncidentCandidate]:
-
         return [
             incident
             for incident in incidents
@@ -36,7 +30,6 @@ class IncidentFilter:
         ]
 
     def _keep(self, incident: IncidentCandidate) -> bool:
-
         if incident.confidence < MIN_CONFIDENCE:
             return False
 
@@ -58,7 +51,6 @@ class IncidentFilter:
 
     @staticmethod
     def _contextual_only(incident: IncidentCandidate) -> bool:
-
         if not incident.rule_names:
             return True
 

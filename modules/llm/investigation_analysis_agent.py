@@ -1,13 +1,16 @@
-"""Prompt -> local model boundary for the Investigation Analysis Agent."""
+"""Prompt -> local/cloud model boundary for the Investigation Analysis Agent."""
 
 from __future__ import annotations
 
 import json
+import os
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 
+from dotenv import load_dotenv
+from google import genai
+
+load_dotenv()
 from modules.llm.investigation_analysis_prompt_builder import (
     InvestigationAnalysisPromptBuilder,
 )
@@ -39,30 +42,21 @@ class InvestigationAnalysisPromptError(InvestigationAnalysisError):
 
 
 class InvestigationAnalysisModelError(InvestigationAnalysisError):
-    """Raised when the local model backend fails to produce a response."""
+    """Raised when the model backend fails to produce a response."""
 
 
 class InvestigationAnalysisAgent:
-    """Send ONE deterministic, whole-investigation prompt to the local
-
-    model and return its raw response, wrapped with call metadata.
-    """
+    """Send ONE deterministic, whole-investigation prompt to the model."""
 
     def __init__(
         self,
         prompt_builder: InvestigationAnalysisPromptBuilder | None = None,
-        model_name: str = "qwen2.5:14b",
+        model_name: str ="gemini-3.5-flash",
         temperature: float = 0.0,
-        ollama_host: str = "http://localhost:11434",
-        timeout_seconds: float = 600.0,
-        keep_alive: str | int = "30m",
     ):
         self._prompt_builder = prompt_builder or InvestigationAnalysisPromptBuilder()
         self._model_name = model_name
         self._temperature = temperature
-        self._ollama_host = ollama_host
-        self._timeout_seconds = timeout_seconds
-        self._keep_alive = keep_alive
 
     def analyze(
         self,
@@ -71,7 +65,6 @@ class InvestigationAnalysisAgent:
         inventory_context: list[dict],
         attack_chain: list[dict] | dict | None = None,
     ) -> InvestigationLLMResponse:
-        """Build the investigation-wide prompt and return the model's response."""
         self._validate_inputs(prioritized_incidents, timeline, inventory_context)
 
         prompt = self._build_prompt(
@@ -92,10 +85,6 @@ class InvestigationAnalysisAgent:
             detailed_incident_count=len(detailed),
         )
 
-    # ------------------------------------------------------------------
-    # Input validation
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _validate_inputs(
         prioritized_incidents: list[dict],
@@ -103,25 +92,11 @@ class InvestigationAnalysisAgent:
         inventory_context: list[dict],
     ) -> None:
         if not isinstance(prioritized_incidents, list):
-            raise InvestigationAnalysisInputError(
-                "prioritized_incidents must be a list, got "
-                f"{type(prioritized_incidents).__name__}"
-            )
-
+            raise InvestigationAnalysisInputError("prioritized_incidents must be a list")
         if not isinstance(timeline, list):
-            raise InvestigationAnalysisInputError(
-                f"timeline must be a list, got {type(timeline).__name__}"
-            )
-
+            raise InvestigationAnalysisInputError("timeline must be a list")
         if not isinstance(inventory_context, list):
-            raise InvestigationAnalysisInputError(
-                "inventory_context must be a list, got "
-                f"{type(inventory_context).__name__}"
-            )
-
-    # ------------------------------------------------------------------
-    # Prompt construction
-    # ------------------------------------------------------------------
+            raise InvestigationAnalysisInputError("inventory_context must be a list")
 
     def _build_prompt(
         self,
@@ -134,16 +109,10 @@ class InvestigationAnalysisAgent:
             return self._prompt_builder.build(
                 prioritized_incidents, timeline, inventory_context, attack_chain
             )
-        except InvestigationAnalysisError:
-            raise
         except Exception as error:
             raise InvestigationAnalysisPromptError(
-                f"Failed to build investigation analysis prompt: {error}"
+                f"Failed to build prompt: {error}"
             ) from error
-
-    # ------------------------------------------------------------------
-    # Model invocation
-    # ------------------------------------------------------------------
 
     @dataclass(slots=True, frozen=True)
     class _RawResponse:
@@ -170,81 +139,33 @@ class InvestigationAnalysisAgent:
         )
 
     def _call_model(self, prompt: str) -> str:
-        payload = json.dumps(
-            {
-                "model": self._model_name,
-                "prompt": prompt,
-                "stream": True,
-                "keep_alive": self._keep_alive,
-                "options": {
-                    "temperature": self._temperature,
-                },
-            }
-        ).encode("utf-8")
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise InvestigationAnalysisModelError("GEMINI_API_KEY not found in .env")
 
-        request = urllib.request.Request(
-            f"{self._ollama_host}/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+        model = os.getenv("GEMINI_MODEL", self._model_name)
+        client = genai.Client(api_key=api_key)
 
-        try:
-            with urllib.request.urlopen(
-                request, timeout=self._timeout_seconds
-            ) as response:
-                return self._consume_stream(response)
-        except urllib.error.HTTPError as error:
-            body = error.read().decode("utf-8", errors="replace")
-            raise InvestigationAnalysisModelError(
-                f"HTTP {error.code}\n\n{body}"
-            ) from error
-        except urllib.error.URLError as error:
-            raise InvestigationAnalysisModelError(
-                f"Could not reach Ollama at {self._ollama_host}: {error}"
-            ) from error
-        except TimeoutError as error:
-            raise InvestigationAnalysisModelError(
-                f"Ollama produced no new output for over "
-                f"{self._timeout_seconds:.0f}s (idle timeout): {error}"
-            ) from error
-        except Exception as error:
-            raise InvestigationAnalysisModelError(
-                f"Failed during request to Ollama: {error}"
-            ) from error
-
-    def _consume_stream(self, response) -> str:
-        chunks: list[str] = []
-        saw_done = False
-
-        for raw_line in response:
-            line = raw_line.decode("utf-8", errors="replace").strip()
-            if not line:
-                continue
-
+        for attempt in range(5):
             try:
-                parsed = json.loads(line)
-            except json.JSONDecodeError as error:
-                raise InvestigationAnalysisModelError(
-                    f"Ollama streamed a non-JSON line: {error}"
-                ) from error
-
-            if "error" in parsed:
-                raise InvestigationAnalysisModelError(
-                    f"Ollama returned an error for model '{self._model_name}': "
-                    f"{parsed['error']} (is it pulled? try `ollama pull {self._model_name}`)"
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
                 )
 
-            chunks.append(parsed.get("response", ""))
+                if not response.text:
+                    raise InvestigationAnalysisModelError("Gemini returned an empty response.")
 
-            if parsed.get("done"):
-                saw_done = True
-                break
+                return response.text
 
-        if not saw_done:
-            raise InvestigationAnalysisModelError(
-                "Ollama's stream ended without a final done=true message -- "
-                "the connection was likely closed early."
-            )
+            except Exception as error:
+                error_str = str(error)
+                if "503" in error_str or "UNAVAILABLE" in error_str.upper():
+                    if attempt < 4:
+                        time.sleep(15)
+                        continue
+                raise InvestigationAnalysisModelError(
+                    f"Gemini API error: {error}"
+                ) from error
 
-        return "".join(chunks)
+        raise InvestigationAnalysisModelError("Gemini API call failed after max retries.")

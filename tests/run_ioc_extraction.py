@@ -1,16 +1,15 @@
-"""End-to-end run: real KAPE dataset -> ONE final DFIR report.
+"""End-to-end run: real KAPE dataset -> deterministic pipeline -> IOC report.
 
-This replaces the loop in test_incident_analysis_pipeline.py that called
-IncidentAnalysisAgent once per incident (648 calls). Everything up to
-and including IncidentPrioritizer is unchanged -- this script only
-replaces what happens after prioritization: instead of looping and
-calling the model per incident, it builds ONE investigation-wide
-prompt and calls the model ONCE.
+Mirrors run_investigation_analysis.py's pipeline-construction stage
+exactly (same modules, same order, same rules) so both agents run
+against identical prioritized_incidents / timeline / attack_chain /
+inventory_context. It does not call InvestigationAnalysisAgent -- this
+script exercises Agent 2 (IOCExtractionAgent) on its own, since Agent 2
+is independent of Agent 1 by design.
 """
 
 from __future__ import annotations
 
-import json
 import sys
 
 from modules.correlation.attack_chain_builder import AttackChainBuilder
@@ -33,18 +32,18 @@ from modules.discovery.inventory import Inventory
 from modules.discovery.scanner import DiscoveryEngine
 from modules.inventory.context_builder import InventoryContextBuilder
 from modules.inventory.context_extractor import InventoryContextExtractor
-from modules.llm.investigation_analysis_agent import (
-    InvestigationAnalysisAgent,
-    InvestigationAnalysisError,
-)
+from modules.ioc.candidate_ioc_collector import CandidateIOCCollector
+from modules.llm.ioc_extraction_agent import IOCExtractionAgent, IOCExtractionError
 from modules.normalizer.normalizer import Normalizer
 from modules.parsers.parser_manager import ParserManager
 from modules.timeline.builder import TimelineBuilder
-from modules.mitre.mapper import MITREMapper
+from modules.utils.json_export import export_json
 
 DATASET_PATH = "input/KAPE_OUTPUT"
 MODEL_NAME = "gemini-3.5-flash"
-MAX_DETAILED_INCIDENTS: int | None = None
+MAX_DETAILED_INCIDENTS = 40
+MAX_RETRIES = 2
+OUTPUT_PATH = "output/iocs/ioc_report.json"
 
 
 def _section(title: str) -> None:
@@ -95,23 +94,13 @@ def main() -> None:
     )
     correlations = correlation_engine.run(timeline)
 
-    mitre_mapper = MITREMapper()
-    correlations = mitre_mapper.map(correlations)
-
-    # INCIDENTS
+    # INCIDENTS -- identical construction to run_investigation_analysis.py
     graph_edges = IncidentGraphBuilder().build(correlations)
     incidents = IncidentCandidateBuilder().build(correlations, graph_edges)
     incidents = IncidentEnricher().enrich(incidents, correlations)
     serialized_incidents = IncidentSerializer().serialize(incidents, correlations)
     prioritized_incidents = IncidentPrioritizer().prioritize(serialized_incidents)
     attack_chain = AttackChainBuilder().build(prioritized_incidents)
-    from modules.correlation.incident_filter import IncidentFilter
-
-    filterer = IncidentFilter()
-    incidents = filterer.filter(incidents)
-
-    enricher = IncidentEnricher()
-    incidents = enricher.enrich(incidents, correlations)
 
     _section("INCIDENTS")
     print(f"Incidents generated: {len(serialized_incidents)}")
@@ -126,44 +115,58 @@ def main() -> None:
     ]
     inventory_context = InventoryContextBuilder().build(extracted)
 
+    # Collect candidate IOCs for prompt preview
+    candidate_iocs = CandidateIOCCollector().collect(prioritized_incidents)
+
     # ------------------------------------------------------------
-    # ONE model call for the whole investigation.
+    # Agent 2: IOC extraction.
     # ------------------------------------------------------------
     try:
-        agent = InvestigationAnalysisAgent(
-                model_name=MODEL_NAME
-            )
+        agent = IOCExtractionAgent(
+            model_name=MODEL_NAME, max_retries=MAX_RETRIES
+        )
         agent._prompt_builder._max_detailed_incidents = MAX_DETAILED_INCIDENTS
     except Exception as error:
-        _fail("Investigation Analysis Agent (construction)", error)
+        _fail("IOC Extraction Agent (construction)", error)
         return
 
-    prompt_preview = agent._build_prompt(
-        prioritized_incidents, timeline, inventory_context, attack_chain
+    # Updated: pass candidate_iocs to _build_prompt
+    prompt_preview = agent._build_prompt(candidate_iocs)
+
+    print(
+        f"\nPrompt size: {len(prompt_preview):,} characters "
+        f"(~{len(prompt_preview) // 4:,} estimated tokens)"
     )
-    print(f"\nPrompt size: {len(prompt_preview):,} characters "
-          f"(~{len(prompt_preview) // 4:,} estimated tokens)")
-    with open("prompt_debug.txt", "w", encoding="utf-8") as f:
+    print("\n========== IOC PROMPT ==========")
+    print(f"Characters : {len(prompt_preview):,}")
+    print(f"Approx tokens : {len(prompt_preview)//3:,}")
+    print("================================\n")
+    print(prompt_preview[:5000])
+    print("=" * 80)
+    print(prompt_preview[-5000:])
+    with open("ioc_prompt_debug.txt", "w", encoding="utf-8") as f:
         f.write(prompt_preview)
 
     try:
-        response = agent.analyze(
+        result = agent.extract(
             prioritized_incidents, timeline, inventory_context, attack_chain
         )
-    except InvestigationAnalysisError as error:
-        _fail("LLM Analysis (whole investigation)", error)
+    except IOCExtractionError as error:
+        _fail("IOC Extraction (whole investigation)", error)
         return
 
-    _section("FINAL DFIR REPORT")
-    print(f"Model: {response.model_name}")
-    print(f"Incidents analyzed: {response.incident_count} "
-          f"({response.detailed_incident_count} in full detail)")
-    print(f"Execution time: {response.duration_seconds:.2f}s")
-    print()
-    print(response.text)
+    _section("IOC EXTRACTION RESULT")
+    print(f"Model: {result.model_name}")
+    print(
+        f"Incidents analyzed: {result.incident_count} "
+        f"({result.detailed_incident_count} candidate IOCs processed)"
+    )
+    print(f"Attempts used: {result.attempts} (max_retries={MAX_RETRIES})")
+    print(f"Execution time: {result.duration_seconds:.2f}s")
+    print(f"IOCs extracted: {len(result.report.iocs)}")
 
-    with open("output/reports/investigation_report.md", "w", encoding="utf-8") as f:
-        f.write(response.text)
+    export_json(result.report, OUTPUT_PATH)
+    print(f"\nSaved validated IOC report to {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":
