@@ -43,14 +43,15 @@ function initResults() {
     btn.addEventListener('click', function () {
       const key = artifactKeyForButton(btn);
       if (hasRealFile(key)) {
-        window.open('/api/file/' + state.jobId + '/' + key, '_blank');
+        window.open(API_BASE + "/api/file/" + state.jobId + "/" + key);
       }
     });
   });
 }
 
 function realDownload(key) {
-  const url = '/api/file/' + state.jobId + '/' + key;
+  const url =
+    API_BASE + "/api/file/" + state.jobId + "/" + key;
   const a = document.createElement('a');
   a.href = url;
   a.download = '';

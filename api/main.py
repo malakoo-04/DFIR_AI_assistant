@@ -22,6 +22,7 @@ Endpoints:
     POST /api/ioc                          -> run the IOC-only pipeline
     POST /api/hayabusa                      -> architecture placeholder, not implemented yet
     GET  /api/status/{job_id}                -> queued | running | completed | failed
+    GET  /api/logs/{job_id}?since=N          -> live console output (real print() lines from the pipeline)
     GET  /api/result/{job_id}                -> output file paths once completed
     GET  /api/file/{job_id}/{artifact_key}    -> download/open a generated file (e.g. final_report, ioc_report)
 """
@@ -35,6 +36,7 @@ from fastapi.responses import FileResponse
 from api.pipeline_runner import (
     JobStatus,
     get_job,
+    job_to_logs_dict,
     job_to_result_dict,
     job_to_status_dict,
     resolve_output_file,
@@ -86,6 +88,24 @@ def get_status(job_id: str):
     if job is None:
         raise HTTPException(status_code=404, detail="Unknown job_id")
     return job_to_status_dict(job)
+
+
+@app.get("/api/logs/{job_id}")
+def get_logs(job_id: str, since: int = 0):
+    """
+    Live backend console output for a job — the real print() lines
+    emitted by the pipeline (Discovery, Parsers, Timeline, Correlation,
+    the LLM agents, e.g. "Incidents generated: 815",
+    "Waiting 65 seconds for Gemini quota reset..."), not simulated text.
+
+    `since` is the `next_offset` returned by the previous call (0 on
+    the first call). Only the lines appended after that point are
+    returned, so the frontend can poll this cheaply once a second.
+    """
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown job_id")
+    return job_to_logs_dict(job, since=since)
 
 
 @app.get("/api/result/{job_id}")

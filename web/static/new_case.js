@@ -95,6 +95,16 @@ function validateForm() {
 }
 
 function launchPipeline(runType) {
+  // Prevent duplicate submissions: ignore extra clicks while a run
+  // is already in flight for this generation.
+  if (state.runInFlight) return;
+  state.runInFlight = true;
+  ['btnDfir', 'btnIoc', 'btnHaya'].forEach(function (id) {
+    const btn = $(id);
+    if (btn) btn.disabled = true;
+  });
+
+  state.runGen++;
   state.runType = runType;
   state.invName = ($('invName').value.trim()) || 'Untitled investigation';
   const pipeline = PIPELINES[runType];

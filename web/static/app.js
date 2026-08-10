@@ -27,6 +27,9 @@ const state = {
   startTime: null,
   timer: null,
   elapsedTimer: null,
+  runGen: 0,   // bumped on every launchPipeline() call so a stale
+               // run's polling (pollStatus/pollLogs in progress.js)
+               // stops instead of leaking into the next run.
 };
 
 document.addEventListener('DOMContentLoaded', function init() {

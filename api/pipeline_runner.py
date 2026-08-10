@@ -33,12 +33,14 @@ that swap would happen, so callers do not need to change.
 
 from __future__ import annotations
 
+import io
 import sys
 import threading
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional
@@ -79,11 +81,85 @@ class Job:
     status: JobStatus = JobStatus.QUEUED
     result: Optional[dict] = None
     error: Optional[str] = None
+    logs: list[str] = field(default_factory=list, repr=False)
     lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def log(self, line: str) -> None:
+        """Append one already-formatted log line to this job's log buffer."""
+        with self.lock:
+            self.logs.append(line)
 
 
 _JOBS: dict[str, Job] = {}
 _JOBS_LOCK = threading.Lock()
+
+# ------------------------------------------------------------------
+# Live log capture.
+#
+# The pipeline (modules/, scripts/run_final_report.py,
+# scripts/run_ioc_extraction.py) reports progress exclusively via
+# print(), e.g. "Incidents generated: 815", "Candidate IOCs: 1779",
+# "Waiting 65 seconds for Gemini quota reset...". Nothing in that
+# code is touched: instead, sys.stdout is replaced *once*, at import
+# time, with a small tee that still writes through to the real
+# stdout (so `uvicorn` console output / logs are unaffected) and
+# additionally routes each completed line into whichever Job is
+# currently "active" on the calling thread.
+#
+# Routing is done via threading.local() rather than a global,
+# because the executor may run two jobs concurrently (different
+# threads) and each must only see its own output.
+# ------------------------------------------------------------------
+
+_LOG_CONTEXT = threading.local()
+
+
+class _JobLogTee(io.TextIOBase):
+    """Writes through to the wrapped stream and mirrors complete
+    lines to the Job bound to the current thread (if any)."""
+
+    def __init__(self, wrapped):
+        self._wrapped = wrapped
+
+    def write(self, s: str) -> int:
+        self._wrapped.write(s)
+
+        job = getattr(_LOG_CONTEXT, "job", None)
+        if job is not None and s:
+            buf = getattr(_LOG_CONTEXT, "buf", "") + s
+            *complete, remainder = buf.split("\n")
+            for line in complete:
+                if line.strip():
+                    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                    job.log(f"[{ts}] {line}")
+            _LOG_CONTEXT.buf = remainder
+        return len(s)
+
+    def flush(self) -> None:
+        self._wrapped.flush()
+
+
+# Install once. Safe to import this module multiple times (FastAPI /
+# uvicorn --reload notwithstanding) because we only wrap whatever
+# sys.stdout currently is, once, on first import.
+if not isinstance(sys.stdout, _JobLogTee):
+    sys.stdout = _JobLogTee(sys.stdout)
+
+
+def _bind_job_logging(job: Job) -> None:
+    _LOG_CONTEXT.job = job
+    _LOG_CONTEXT.buf = ""
+
+
+def _unbind_job_logging(job: Job) -> None:
+    # Flush whatever partial line is left (e.g. a print without a
+    # trailing newline, or the process being between prints).
+    remainder = getattr(_LOG_CONTEXT, "buf", "")
+    if remainder.strip():
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        job.log(f"[{ts}] {remainder}")
+    _LOG_CONTEXT.job = None
+    _LOG_CONTEXT.buf = ""
 
 # Small pool: the underlying pipeline is itself heavy (parsing + LLM
 # calls), so we cap concurrency rather than spawning unbounded threads
@@ -113,6 +189,7 @@ def get_job(job_id: str) -> Optional[Job]:
 def _run_report(job: Job) -> None:
     with job.lock:
         job.status = JobStatus.RUNNING
+    _bind_job_logging(job)
     try:
         # Reuse the existing full pipeline function exactly as-is.
         result = run_final_report.generate_final_report()
@@ -134,11 +211,14 @@ def _run_report(job: Job) -> None:
             else:
                 job.error = traceback.format_exc()
             job.status = JobStatus.FAILED
+    finally:
+        _unbind_job_logging(job)
 
 
 def _run_ioc(job: Job) -> None:
     with job.lock:
         job.status = JobStatus.RUNNING
+    _bind_job_logging(job)
     try:
         # Reuse the existing IOC-only pipeline function exactly as-is.
         result = run_ioc_extraction.generate_ioc_report()
@@ -152,6 +232,8 @@ def _run_ioc(job: Job) -> None:
             else:
                 job.error = traceback.format_exc()
             job.status = JobStatus.FAILED
+    finally:
+        _unbind_job_logging(job)
 
 
 def submit_report_job() -> Job:
@@ -171,6 +253,24 @@ def submit_ioc_job() -> Job:
 def job_to_status_dict(job: Job) -> dict:
     with job.lock:
         return {"job_id": job.job_id, "status": job.status.value}
+
+
+def job_to_logs_dict(job: Job, since: int = 0) -> dict:
+    """
+    Return log lines appended after index `since`, plus the offset the
+    caller should pass as `since` on its next poll. `since` <= 0 (or
+    beyond the end, e.g. after a job was cleared) is clamped safely.
+    """
+    with job.lock:
+        total = len(job.logs)
+        start = since if 0 <= since <= total else 0
+        new_lines = job.logs[start:]
+        return {
+            "job_id": job.job_id,
+            "status": job.status.value,
+            "logs": new_lines,
+            "next_offset": total,
+        }
 
 
 def job_to_result_dict(job: Job) -> dict:
