@@ -13,7 +13,7 @@ Final DFIR Report Agent
 """
 
 from __future__ import annotations
-
+from modules.report.pdf_generator import generate_pdf
 import json
 import sys
 from dataclasses import asdict
@@ -80,7 +80,7 @@ MAX_RETRIES = 2
 INVESTIGATION_OUTPUT = "output/reports/investigation_report.md"
 IOC_OUTPUT = "output/iocs/ioc_report.json"
 FINAL_REPORT_OUTPUT = "output/reports/final_report.md"
-
+FINAL_REPORT_PDF_OUTPUT = "output/reports/final_report.pdf"
 
 def _section(title: str) -> None:
 
@@ -94,6 +94,8 @@ def _fail(stage: str, error: Exception) -> None:
     _section(f"PIPELINE FAILED AT: {stage}")
 
     print(f"{type(error).__name__}: {error}")
+
+    print("[PHASE] FAILED")
 
     sys.exit(1)
 
@@ -121,9 +123,15 @@ def generate_final_report():
     # DISCOVERY
     ##############################################################
 
+    print("[PHASE] DISCOVERY")
+
     scanner = DiscoveryEngine(DATASET_PATH)
 
     artifacts = scanner.scan()
+
+    print(f"[STAT] artifacts_discovered={len(artifacts)}")
+
+    print("[PHASE] INVENTORY")
 
     inventory = Inventory()
 
@@ -132,6 +140,8 @@ def generate_final_report():
     ##############################################################
     # PARSERS
     ##############################################################
+
+    print("[PHASE] PARSERS")
 
     parser_manager = ParserManager()
 
@@ -156,9 +166,13 @@ def generate_final_report():
 
         all_records.extend(records)
 
+    print(f"[STAT] parsed_events={len(all_records)}")
+
     ##############################################################
     # NORMALIZATION
     ##############################################################
+
+    print("[PHASE] NORMALIZATION")
 
     normalizer = Normalizer()
 
@@ -166,9 +180,13 @@ def generate_final_report():
         all_records
     )
 
+    print(f"[STAT] normalized_events={len(normalized_events)}")
+
     ##############################################################
     # TIMELINE
     ##############################################################
+
+    print("[PHASE] TIMELINE")
 
     timeline = TimelineBuilder().build(
         normalized_events
@@ -177,6 +195,8 @@ def generate_final_report():
     ##############################################################
     # CORRELATION ENGINE
     ##############################################################
+
+    print("[PHASE] CORRELATION")
 
     correlation_engine = CorrelationEngine(
         rules=[
@@ -199,6 +219,8 @@ def generate_final_report():
     ##############################################################
     # MITRE MAPPING
     ##############################################################
+
+    print("[PHASE] MITRE")
 
     correlations = MITREMapper().map(
         correlations
@@ -290,6 +312,8 @@ def generate_final_report():
             "No incidents generated."
         )
 
+        print("[PHASE] COMPLETED")
+
         return None
 
     #################################################################
@@ -300,6 +324,8 @@ def generate_final_report():
     # AGENT 1
     # INVESTIGATION
     ##############################################################
+
+    print("[PHASE] INVESTIGATION")
 
     try:
 
@@ -344,6 +370,8 @@ def generate_final_report():
 
         f.write(investigation_prompt)
 
+    FINAL_REPORT_PDF_OUTPUT = "output/reports/final_report.pdf"
+
     try:
 
         investigation_result = (
@@ -381,6 +409,8 @@ def generate_final_report():
     # IOC EXTRACTION
     ##############################################################
 
+    print("[PHASE] IOC_EXTRACTION")
+
     try:
 
         ioc_agent = IOCExtractionAgent(
@@ -402,6 +432,8 @@ def generate_final_report():
     candidate_iocs = ioc_agent._collector.collect(
     prioritized_incidents
 )
+
+    print(f"[STAT] candidate_iocs={len(candidate_iocs)}")
 
     ioc_prompt = ioc_agent._build_prompt(
         candidate_iocs
@@ -444,6 +476,10 @@ def generate_final_report():
 
         return
 
+    print("[PHASE] IOC_REPORT")
+
+    print(f"[STAT] confirmed_iocs={len(ioc_result.report.iocs)}")
+
     export_json(
         ioc_result.report,
         IOC_OUTPUT,
@@ -453,6 +489,8 @@ def generate_final_report():
     # AGENT 3
     # FINAL REPORT
     ##############################################################
+
+    print("[PHASE] FINAL_REPORT")
 
     try:
 
@@ -503,6 +541,30 @@ def generate_final_report():
 
         f.write(final_report)
 
+    print("[PHASE] PDF_GENERATION")
+
+    print("Generating PDF report...")
+
+    try:
+
+        final_report_pages = generate_pdf(
+            FINAL_REPORT_OUTPUT,
+            FINAL_REPORT_PDF_OUTPUT,
+        )
+
+        print(
+            f"[STAT] final_report_pages={final_report_pages}"
+        )
+
+    except Exception as error:
+
+        _fail(
+            "PDF Generation",
+            error,
+        )
+
+        return
+
     _section("FINAL DFIR REPORT")
 
     print()
@@ -516,10 +578,24 @@ def generate_final_report():
     print(f"IOC           : {IOC_OUTPUT}")
     print(f"Final Report  : {FINAL_REPORT_OUTPUT}")
 
+    print("[PHASE] COMPLETED")
+
     return {
         "investigation_report": INVESTIGATION_OUTPUT,
         "ioc_report": IOC_OUTPUT,
+
+        # Keep Markdown available internally.
         "final_report": FINAL_REPORT_OUTPUT,
+
+        # Actual user-facing PDF.
+        "final_report_pdf": FINAL_REPORT_PDF_OUTPUT,
+
+        # Real metadata for the UI.
+        "incidents_generated": len(
+            serialized_incidents
+        ),
+
+        "final_report_pages": final_report_pages,
     }
 
 

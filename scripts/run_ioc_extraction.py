@@ -55,6 +55,7 @@ def _section(title: str) -> None:
 def _fail(stage: str, error: Exception) -> None:
     _section(f"PIPELINE FAILED AT: {stage}")
     print(f"{type(error).__name__}: {error}")
+    print("[PHASE] FAILED")
     sys.exit(1)
 
 
@@ -71,11 +72,16 @@ def generate_ioc_report() -> dict | None:
         {"ioc_report": OUTPUT_PATH} on success, or None if no
         incidents were generated (mirrors the original early-return).
     """
+    print("[PHASE] DISCOVERY")
     scanner = DiscoveryEngine(DATASET_PATH)
     artifacts = scanner.scan()
+    print(f"[STAT] artifacts_discovered={len(artifacts)}")
+
+    print("[PHASE] INVENTORY")
     inventory = Inventory()
     inventory.extend(artifacts)
 
+    print("[PHASE] PARSERS")
     parser_manager = ParserManager()
     all_records = []
     unparsed_recognized_artifacts = []
@@ -84,13 +90,18 @@ def generate_ioc_report() -> dict | None:
         if not records and parser_manager.get_parser(artifact.artifact_type) is None:
             unparsed_recognized_artifacts.append(artifact)
         all_records.extend(records)
+    print(f"[STAT] parsed_events={len(all_records)}")
 
+    print("[PHASE] NORMALIZATION")
     normalizer = Normalizer()
     normalized_events = normalizer.normalize(all_records)
+    print(f"[STAT] normalized_events={len(normalized_events)}")
 
+    print("[PHASE] TIMELINE")
     timeline_builder = TimelineBuilder()
     timeline = timeline_builder.build(normalized_events)
 
+    print("[PHASE] CORRELATION")
     correlation_engine = CorrelationEngine(
         rules=[
             RegistryPersistenceRule(),
@@ -118,6 +129,7 @@ def generate_ioc_report() -> dict | None:
     print(f"Incidents generated: {len(serialized_incidents)}")
     if not serialized_incidents:
         print("No incidents -- nothing to send to the model.")
+        print("[PHASE] COMPLETED")
         return None
 
     # INVENTORY CONTEXT
@@ -127,8 +139,10 @@ def generate_ioc_report() -> dict | None:
     ]
     inventory_context = InventoryContextBuilder().build(extracted)
 
+    print("[PHASE] IOC_EXTRACTION")
     # Collect candidate IOCs for prompt preview
     candidate_iocs = CandidateIOCCollector().collect(prioritized_incidents)
+    print(f"[STAT] candidate_iocs={len(candidate_iocs)}")
 
     # ------------------------------------------------------------
     # Agent 2: IOC extraction.
@@ -167,6 +181,7 @@ def generate_ioc_report() -> dict | None:
         _fail("IOC Extraction (whole investigation)", error)
         return
 
+    print("[PHASE] IOC_REPORT")
     _section("IOC EXTRACTION RESULT")
     print(f"Model: {result.model_name}")
     print(
@@ -176,9 +191,11 @@ def generate_ioc_report() -> dict | None:
     print(f"Attempts used: {result.attempts} (max_retries={MAX_RETRIES})")
     print(f"Execution time: {result.duration_seconds:.2f}s")
     print(f"IOCs extracted: {len(result.report.iocs)}")
+    print(f"[STAT] confirmed_iocs={len(result.report.iocs)}")
 
     export_json(result.report, OUTPUT_PATH)
     print(f"\nSaved validated IOC report to {OUTPUT_PATH}")
+    print("[PHASE] COMPLETED")
 
     return {"ioc_report": OUTPUT_PATH}
 

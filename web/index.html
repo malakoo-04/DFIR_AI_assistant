@@ -356,6 +356,7 @@ a{color:var(--blue-bright); text-decoration:none;}
 .progressbar-fill{height:100%; width:0%; border-radius:5px; background:linear-gradient(90deg, var(--blue), var(--cyan)); transition:width .5s ease; box-shadow:0 0 12px rgba(47,111,237,0.5);}
 
 .stats-row{display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:26px;}
+.stats-row.hayabusa-stats{grid-template-columns:repeat(2, minmax(0, 1fr)); max-width:580px;}
 .stat-card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px;}
 .stat-card .stat-label{font-size:11px; color:var(--text-tertiary); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; display:flex; align-items:center; gap:6px;}
 .stat-card .stat-label svg{width:12px; height:12px;}
@@ -723,11 +724,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .dropzone:foc
 
       <div class="stats-row" id="statsRow">
         <div class="stat-card stat-artifacts">
-          <div class="stat-label"><svg viewBox="0 0 24 24"><use href="#i-layers"/></svg> Artifacts discovered</div>
+          <div class="stat-label"><svg viewBox="0 0 24 24"><use href="#i-layers"/></svg> <span>Artifacts discovered</span></div>
           <div class="stat-value" id="statArtifacts">0</div>
         </div>
         <div class="stat-card stat-events">
-          <div class="stat-label"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg> Parsed events</div>
+          <div class="stat-label"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg> <span>Parsed events</span></div>
           <div class="stat-value" id="statEvents">0</div>
         </div>
         <div class="stat-card stat-incidents">
@@ -795,13 +796,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .dropzone:foc
           <h3>DFIR report</h3>
           <p class="rc-desc">Full incident narrative drafted by the Investigation AI module, including root cause, host timeline highlights, and MITRE ATT&CK mapping.</p>
           <div class="result-meta-row">
-            <div class="result-meta"><div class="rm-label">Pages</div><div class="rm-value">18</div></div>
-            <div class="result-meta"><div class="rm-label">Incidents</div><div class="rm-value">3</div></div>
-            <div class="result-meta"><div class="rm-label">Format</div><div class="rm-value">PDF</div></div>
+            <div class="result-meta">
+            <div class="rm-label">Incidents</div>
+            <div class="rm-value" id="metaDfirIncidents">—</div>
+          </div>
+
+          <div class="result-meta">
+            <div class="rm-label">Format</div>
+            <div class="rm-value">PDF</div>
+          </div>
           </div>
           <div class="rc-actions">
             <button class="btn btn-secondary"><svg viewBox="0 0 24 24"><use href="#i-eye"/></svg> Preview</button>
-            <button class="btn btn-primary" data-download="DFIR_Report.pdf"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> Download PDF</button>
+            <button class="btn btn-primary" data-download="final_report"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> Download report</button>
           </div>
         </div>
 
@@ -829,16 +836,29 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .dropzone:foc
             <span class="result-tag" id="tagHaya">Generated</span>
           </div>
           <h3>Hayabusa results</h3>
-          <p class="rc-desc">Sigma-rule detections from Windows Event Logs, ranked by severity with rule name, channel, and timestamp.</p>
+          <p class="rc-desc">Hayabusa Sigma-rule detections from Windows Event Logs. The HTML report provides a readable Results Summary, while the CSV keeps the complete detection timeline for detailed analysis.</p>
           <div class="result-meta-row">
-            <div class="result-meta"><div class="rm-label">Detections</div><div class="rm-value" id="metaHayaCount">58</div></div>
-            <div class="result-meta"><div class="rm-label">Critical</div><div class="rm-value">4</div></div>
-            <div class="result-meta"><div class="rm-label">Channels</div><div class="rm-value">12</div></div>
+            <div class="result-meta"><div class="rm-label">Detections</div><div class="rm-value" id="metaHayaCount">—</div></div>
+            <div class="result-meta"><div class="rm-label">Critical</div><div class="rm-value" id="metaHayaCritical">—</div></div>
+            <div class="result-meta"><div class="rm-label">Channels</div><div class="rm-value" id="metaHayaChannels">—</div></div>
           </div>
           <div class="rc-actions">
-            <button class="btn btn-secondary"><svg viewBox="0 0 24 24"><use href="#i-eye"/></svg> View results</button>
-            <button class="btn btn-secondary" data-download="Hayabusa_Results.csv"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> CSV</button>
-            <button class="btn btn-secondary" data-download="Hayabusa_Results.json"><svg viewBox="0 0 24 24"><use href="#i-download"/></svg> JSON</button>
+            <button
+              class="btn btn-primary"
+              data-artifact="hayabusa_html_report"
+            >
+              <svg viewBox="0 0 24 24"><use href="#i-eye"/></svg>
+              View HTML report
+            </button>
+
+            <button
+              class="btn btn-secondary"
+              data-download="Hayabusa_Results.csv"
+              data-artifact="hayabusa_report"
+            >
+              <svg viewBox="0 0 24 24"><use href="#i-download"/></svg>
+              CSV
+            </button>
           </div>
         </div>
 
@@ -850,8 +870,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, .dropzone:foc
           <h3>Timeline</h3>
           <p class="rc-desc">The full super-timeline can reach millions of events and isn't rendered here — download the structured JSON for offline analysis or ingestion into your own tooling.</p>
           <div class="result-meta-row">
-            <div class="result-meta"><div class="rm-label">Events</div><div class="rm-value" id="metaTimelineCount">2.18M</div></div>
-            <div class="result-meta"><div class="rm-label">Span</div><div class="rm-value">41 days</div></div>
+            <div class="result-meta">
+            <div class="rm-label">Events</div>
+            <div class="rm-value" id="metaTimelineCount">—</div>
+          </div>
+
+          <div class="result-meta">
+            <div class="rm-label">Span</div>
+            <div class="rm-value" id="metaTimelineSpan">—</div>
+          </div>
             <div class="result-meta"><div class="rm-label">Format</div><div class="rm-value">JSON</div></div>
           </div>
           <div class="rc-actions">

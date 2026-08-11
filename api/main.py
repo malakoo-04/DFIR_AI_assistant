@@ -20,7 +20,7 @@ Run (from the project root):
 Endpoints:
     POST /api/report                       -> run the full DFIR pipeline
     POST /api/ioc                          -> run the IOC-only pipeline
-    POST /api/hayabusa                      -> architecture placeholder, not implemented yet
+    POST /api/hayabusa                      -> run the independent Hayabusa analysis
     GET  /api/status/{job_id}                -> queued | running | completed | failed
     GET  /api/logs/{job_id}?since=N          -> live console output (real print() lines from the pipeline)
     GET  /api/result/{job_id}                -> output file paths once completed
@@ -40,6 +40,7 @@ from api.pipeline_runner import (
     job_to_result_dict,
     job_to_status_dict,
     resolve_output_file,
+    submit_hayabusa_job,
     submit_ioc_job,
     submit_report_job,
 )
@@ -75,11 +76,14 @@ def start_ioc_job():
 @app.post("/api/hayabusa")
 def start_hayabusa_job():
     """
-    Placeholder only. Hayabusa is a separate, independent module
-    (Uploaded KAPE ZIP -> DFIR Pipeline / Hayabusa in parallel) and is
-    not wired up yet. No job is created here.
+    Kick off the independent Hayabusa analysis. Async.
+
+    Hayabusa produces its own CSV result and is deliberately not connected
+    to the DFIR report, IOC extraction, MITRE mapping, correlation engine,
+    or investigation agent.
     """
-    return {"status": "not_implemented"}
+    job = submit_hayabusa_job()
+    return job_to_status_dict(job)
 
 
 @app.get("/api/status/{job_id}")
@@ -129,9 +133,11 @@ def get_file(job_id: str, artifact_key: str):
     Serve one generated output file, e.g.:
         GET /api/file/<job_id>/final_report
         GET /api/file/<job_id>/ioc_report
+        GET /api/file/<job_id>/hayabusa_report
 
     `artifact_key` is one of the keys returned by GET /api/result/{job_id}
-    (e.g. "final_report", "investigation_report", "ioc_report"). Used by
+    (e.g. "final_report", "investigation_report", "ioc_report",
+    "hayabusa_report"). Used by
     the Results page for both "Open" (opened in a new tab) and
     "Download" (same URL, browser saves it).
     """
@@ -146,4 +152,15 @@ def get_file(job_id: str, artifact_key: str):
             detail=f"No file found for artifact '{artifact_key}' on job {job_id}",
         )
 
-    return FileResponse(path, filename=path.name)
+    if path.suffix.lower() == ".pdf":
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/pdf",
+            content_disposition_type="inline",
+        )
+
+    return FileResponse(
+        path,
+        filename=path.name,
+    )

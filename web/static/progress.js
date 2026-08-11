@@ -2,374 +2,1521 @@
    progress.js — DFIR-AI frontend
    "Investigation progress" page.
 
-   PIPELINES holds the cosmetic stage/stat data used to drive the
-   stage timeline while a job is running — the backend doesn't report
-   fine-grained per-stage progress, so this fills the UI in between
-   "job started" and "job finished". The console panel itself is NOT
-   cosmetic: it streams the real print() output of the running
-   pipeline via GET /api/logs/{job_id} (see pollLogs() below), and
-   stat counters (artifacts / incidents / IOCs) are updated from real
-   numbers parsed out of that output as soon as they appear, falling
-   back to the cosmetic ramp only until real data arrives.
+   Pure visualization of backend state. Nothing on this page is
+   timer-driven or interpolated anymore:
 
-   launchPipeline() (new_case.js) calls runRealPipeline(runType,
-   pipeline) for every run type: it POSTs /api/report, /api/ioc or
-   /api/hayabusa, then polls GET /api/status/{job_id} until the job
-   completes or fails, while the cosmetic stage animation (capped
-   just short of 100% so it never claims "done" before the backend
-   actually is) plays underneath. Once the real job completes,
-   GET /api/result/{job_id} supplies the real output paths, stored on
-   `state` for results.js. Hayabusa (POST /api/hayabusa) is a
-   not-yet-implemented placeholder on the backend and fails
-   immediately with "Not implemented yet".
+     - GET /api/status/{job_id} returns {job_id, status, phase,
+       stats}.
+     - Every poll re-renders the stage list and stat cards from
+       the real backend response.
+     - The console streams real backend lines from
+       GET /api/logs/{job_id}.
+     - Hayabusa runs independently and produces its own CSV.
+
+   IMPORTANT:
+   The log polling has a final fetch after the backend reports
+   "completed". This prevents the status request from winning the
+   race against the log request and hiding the final Hayabusa
+   statistics/output lines.
    ------------------------------------------------------------ */
 
-// Stage-id helpers — every stage renders three DOM ids derived from
-// its own id (stage-<id>, fill-<id>, sub-<id>). Centralized here so
-// the "stage-" / "fill-" / "sub-" prefixes exist in exactly one
-// place instead of being concatenated at every call site.
-function stageId(id) { return 'stage-' + id; }
-function fillId(id) { return 'fill-' + id; }
-function subId(id) { return 'sub-' + id; }
+function stageId(id) {
+  return 'stage-' + id;
+}
+
+function fillId(id) {
+  return 'fill-' + id;
+}
+
+function subId(id) {
+  return 'sub-' + id;
+}
+
 
 const PIPELINES = Object.freeze({
+
   dfir: {
     label: 'Full DFIR pipeline',
     resultTitle: 'DFIR report — full pipeline',
-    stages: [
-      {id:'upload',    title:'Evidence upload',       sub:'Validating archive integrity'},
-      {id:'discover',  title:'Discovery engine',       sub:'Scanning triage structure'},
-      {id:'inventory', title:'Inventory',              sub:'Cataloguing candidate artifacts'},
-      {id:'parsers',   title:'Artifact parsers',       sub:'Parsing MFT, registry, EVTX, prefetch…'},
-      {id:'normalize', title:'Normalization',          sub:'Mapping to unified event schema'},
-      {id:'timeline',  title:'Timeline generation',    sub:'Building master super-timeline'},
-      {id:'correlate', title:'Correlation engine',     sub:'Clustering related events into incidents'},
-      {id:'ai',        title:'AI investigation',       sub:'Drafting incident narrative'},
-      {id:'mitre',     title:'MITRE ATT&CK mapping',   sub:'Mapping techniques to tactics'},
-      {id:'pdf',       title:'PDF report generation',  sub:'Rendering final report'},
-    ],
-    stats: { artifacts:347, events:2184309, incidents:3, iocs:146 },
     incidentsLabel: 'Generated incidents',
-    duration: 9000,
+
+    stages: [
+      {
+        id: 'upload',
+        phase: null,
+        title: 'Evidence upload',
+        sub: 'Archive received and validated'
+      },
+      {
+        id: 'discovery',
+        phase: 'DISCOVERY',
+        title: 'Discovery engine',
+        sub: 'Scanning triage structure'
+      },
+      {
+        id: 'inventory',
+        phase: 'INVENTORY',
+        title: 'Inventory',
+        sub: 'Cataloguing candidate artifacts'
+      },
+      {
+        id: 'parsers',
+        phase: 'PARSERS',
+        title: 'Artifact parsers',
+        sub: 'Parsing MFT, registry, EVTX, prefetch…'
+      },
+      {
+        id: 'normalization',
+        phase: 'NORMALIZATION',
+        title: 'Normalization',
+        sub: 'Mapping to unified event schema'
+      },
+      {
+        id: 'timeline',
+        phase: 'TIMELINE',
+        title: 'Timeline generation',
+        sub: 'Building master super-timeline'
+      },
+      {
+        id: 'correlation',
+        phase: 'CORRELATION',
+        title: 'Correlation engine',
+        sub: 'Clustering related events into incidents'
+      },
+      {
+        id: 'mitre',
+        phase: 'MITRE',
+        title: 'MITRE ATT&CK mapping',
+        sub: 'Mapping techniques to tactics'
+      },
+      {
+        id: 'investigation',
+        phase: 'INVESTIGATION',
+        title: 'AI investigation',
+        sub: 'Drafting incident narrative'
+      },
+      {
+        id: 'ioc_extraction',
+        phase: 'IOC_EXTRACTION',
+        title: 'IOC extraction',
+        sub: 'Extracting hashes, IPs, domains, paths'
+      },
+      {
+        id: 'ioc_report',
+        phase: 'IOC_REPORT',
+        title: 'IOC report',
+        sub: 'Validating IOC report'
+      },
+      {
+        id: 'final_report',
+        phase: 'FINAL_REPORT',
+        title: 'Final report',
+        sub: 'Drafting final DFIR report'
+      }
+    ],
+
+    duration: 9000
   },
+
+
   ioc: {
     label: 'IOC extraction only',
     resultTitle: 'IOC report',
+    incidentsLabel: 'Candidate IOCs',
+
     stages: [
-      {id:'upload',    title:'Evidence upload',       sub:'Validating archive integrity'},
-      {id:'discover',  title:'Discovery engine',       sub:'Scanning triage structure'},
-      {id:'inventory', title:'Inventory',              sub:'Cataloguing candidate artifacts'},
-      {id:'parsers',   title:'Artifact parsers',       sub:'Parsing artifacts relevant to indicators'},
-      {id:'normalize', title:'Normalization',          sub:'Mapping to unified event schema'},
-      {id:'ioc',       title:'IOC extraction',         sub:'Extracting hashes, IPs, domains, paths'},
-      {id:'pdf',       title:'IOC report generation',  sub:'Rendering IOC report'},
+      {
+        id: 'upload',
+        phase: null,
+        title: 'Evidence upload',
+        sub: 'Archive received and validated'
+      },
+      {
+        id: 'discovery',
+        phase: 'DISCOVERY',
+        title: 'Discovery engine',
+        sub: 'Scanning triage structure'
+      },
+      {
+        id: 'inventory',
+        phase: 'INVENTORY',
+        title: 'Inventory',
+        sub: 'Cataloguing candidate artifacts'
+      },
+      {
+        id: 'parsers',
+        phase: 'PARSERS',
+        title: 'Artifact parsers',
+        sub: 'Parsing artifacts relevant to indicators'
+      },
+      {
+        id: 'normalization',
+        phase: 'NORMALIZATION',
+        title: 'Normalization',
+        sub: 'Mapping to unified event schema'
+      },
+      {
+        id: 'timeline',
+        phase: 'TIMELINE',
+        title: 'Timeline generation',
+        sub: 'Building master timeline'
+      },
+      {
+        id: 'correlation',
+        phase: 'CORRELATION',
+        title: 'Correlation engine',
+        sub: 'Clustering related events into incidents'
+      },
+      {
+        id: 'ioc_extraction',
+        phase: 'IOC_EXTRACTION',
+        title: 'IOC extraction',
+        sub: 'Extracting hashes, IPs, domains, paths'
+      },
+      {
+        id: 'ioc_report',
+        phase: 'IOC_REPORT',
+        title: 'IOC report',
+        sub: 'Validating and saving IOC report'
+      }
     ],
-    stats: { artifacts:347, events:84112, incidents:0, iocs:146 },
-    incidentsLabel: 'High-confidence IOCs',
-    duration: 6000,
+
+    duration: 6000
   },
+
+
   haya: {
     label: 'Hayabusa analysis only',
     resultTitle: 'Hayabusa results',
+
     stages: [
-      {id:'upload',    title:'Evidence upload',       sub:'Validating archive integrity'},
-      {id:'discover',  title:'Discovery engine',       sub:'Locating Windows Event Log files'},
-      {id:'inventory', title:'Inventory',              sub:'Cataloguing .evtx channels'},
-      {id:'haya',      title:'Hayabusa rule scan',     sub:'Running Sigma ruleset against EVTX'},
-      {id:'correlate', title:'Result correlation',     sub:'Ranking detections by severity'},
-      {id:'export',    title:'Results export',         sub:'Generating CSV / JSON output'},
-    ],
-    stats: { artifacts:12, events:214880, incidents:58, iocs:0 },
-    incidentsLabel: 'Detections found',
-    duration: 6500,
+      {
+        id: 'upload',
+        phase: null,
+        title: 'Evidence upload',
+        sub: 'Archive received and validated'
+      },
+      {
+        id: 'discovery',
+        phase: 'DISCOVERY',
+        title: 'EVTX discovery',
+        sub: 'Finding Windows Event Log files'
+      },
+      {
+        id: 'scan_init',
+        phase: 'HAYABUSA_SCAN',
+        title: 'Hayabusa initialization',
+        sub: 'Loading rules and preparing the EVTX scan'
+      },
+      {
+        id: 'scanning',
+        phase: 'SCANNING',
+        title: 'EVTX analysis',
+        sub: 'Scanning Event Logs with Hayabusa'
+      },
+      {
+        id: 'saving',
+        phase: 'SAVING_RESULTS',
+        title: 'Results export',
+        sub: 'Writing the independent Hayabusa CSV'
+      }
+    ]
   }
+
 });
 
-/* ------------------------------------------------------------
-   Real pipeline runner — dfir / ioc / haya.
-   Kicks off the actual backend job, then drives the stage/stat UI
-   while polling GET /api/status/{job_id}. Progress is cosmetic
-   (capped at 92%) until the backend reports "completed"; only then
-   do we jump to 100%, mark everything done, and hand off to
-   prepareResults(). The console panel is NOT cosmetic: pollLogs()
-   streams the real print() output of the running job from
-   GET /api/logs/{job_id}, and any artifact/incident/IOC counts found
-   in that real output override the cosmetic stat ramp.
-   ------------------------------------------------------------ */
 
-// Recognizes the pipeline's own count lines, e.g.
-// "Recognized artifacts: 347", "Incidents generated: 815",
-// "Candidate IOCs: 1779", "IOCs extracted: 146" — see
-// modules/discovery/scanner.py, modules/ioc/candidate_ioc_collector.py,
-// scripts/run_final_report.py and scripts/run_ioc_extraction.py.
-const LOG_STAT_PATTERNS = [
-  { statId: 'statArtifacts', re: /Recognized artifacts:\s*([\d,]+)/i },
-  { statId: 'statIncidents', re: /Incidents generated:\s*([\d,]+)/i },
-  { statId: 'statIocs',      re: /Candidate IOCs:\s*([\d,]+)/i },
-  { statId: 'statIocs',      re: /IOCs extracted:\s*([\d,]+)/i },
-];
+const STAT_CARD_CONFIG = {
 
-function applyLogStats(line) {
-  LOG_STAT_PATTERNS.forEach(function (p) {
-    const m = line.match(p.re);
-    if (m) $(p.statId).textContent = m[1];
-  });
-}
+  dfir: [
+    {
+      elId: 'statArtifacts',
+      statKey: 'artifacts_discovered'
+    },
+    {
+      elId: 'statEvents',
+      statKey: 'parsed_events'
+    },
+    {
+      elId: 'statIncidents',
+      statKey: 'incidents_generated'
+    },
+    {
+      elId: 'statIocs',
+      statKey: 'confirmed_iocs'
+    }
+  ],
+
+  ioc: [
+    {
+      elId: 'statArtifacts',
+      statKey: 'artifacts_discovered'
+    },
+    {
+      elId: 'statEvents',
+      statKey: 'parsed_events'
+    },
+    {
+      elId: 'statIncidents',
+      statKey: 'candidate_iocs'
+    },
+    {
+      elId: 'statIocs',
+      statKey: 'confirmed_iocs'
+    }
+  ],
+
+  haya: [
+    {
+      elId: 'statArtifacts',
+      statKey: 'evtx_files_found'
+    },
+    {
+      elId: 'statEvents',
+      statKey: 'evtx_files_loaded'
+    }
+  ]
+
+};
+
 
 function classifyLogLine(line) {
-  if (/error|failed|exception|traceback/i.test(line)) return 'warn';
-  if (/waiting .* seconds|quota/i.test(line)) return 'warn';
+
+  if (
+    /error|failed|exception|traceback/i.test(line)
+  ) {
+    return 'warn';
+  }
+
+  if (
+    /waiting .* seconds|quota/i.test(line)
+  ) {
+    return 'warn';
+  }
+
   return 'info';
 }
 
-// Appends one real backend log line. The server already prefixes
-// each line with "[HH:MM:SS] " (see api/pipeline_runner.py); split
-// that off so it renders in the same .log-time / .log-text structure
-// the console panel's CSS already styles.
-const LOG_TS_PREFIX = /^\[(\d{2}:\d{2}:\d{2})\]\s?/;
+
+const LOG_TS_PREFIX =
+  /^\[(\d{2}:\d{2}:\d{2})\]\s?/;
+
 
 function appendRealLog(line, consoleCountRef) {
-  const body = $('consoleBody');
-  if (body) {
-    const m = line.match(LOG_TS_PREFIX);
-    const ts = m ? '[' + m[1] + ']' : '';
-    const rest = m ? line.slice(m[0].length) : line;
 
-    const div = document.createElement('div');
-    div.className = 'log-line';
+  const body = $('consoleBody');
+
+  if (body) {
+
+    const m =
+      line.match(LOG_TS_PREFIX);
+
+    const ts =
+      m
+        ? '[' + m[1] + ']'
+        : '';
+
+    const rest =
+      m
+        ? line.slice(m[0].length)
+        : line;
+
+    const div =
+      document.createElement('div');
+
+    div.className =
+      'log-line';
+
 
     if (ts) {
-      const time = document.createElement('span');
-      time.className = 'log-time';
-      time.textContent = ts;
+
+      const time =
+        document.createElement('span');
+
+      time.className =
+        'log-time';
+
+      time.textContent =
+        ts;
+
       div.appendChild(time);
     }
 
-    const text = document.createElement('span');
-    text.className = 'log-text ' + classifyLogLine(line);
-    text.textContent = rest;
+
+    const text =
+      document.createElement('span');
+
+    text.className =
+      'log-text ' +
+      classifyLogLine(line);
+
+    text.textContent =
+      rest;
+
     div.appendChild(text);
 
+
     body.appendChild(div);
-    body.scrollTop = body.scrollHeight;
+
+    body.scrollTop =
+      body.scrollHeight;
   }
+
+
   consoleCountRef.n++;
-  $('consoleCount').textContent = consoleCountRef.n + ' lines';
-  applyLogStats(line);
+
+  $('consoleCount').textContent =
+    consoleCountRef.n + ' lines';
 }
 
-// Re-enables the New Investigation run buttons (disabled by
-// launchPipeline() in new_case.js to prevent duplicate submissions)
-// once a run finishes, one way or another.
+
 function releaseRunLock() {
+
   state.runInFlight = false;
-  if (typeof validateForm === 'function') validateForm();
+
+  if (
+    typeof validateForm === 'function'
+  ) {
+    validateForm();
+  }
 }
 
-function runRealPipeline(runType, pipeline) {
-  const myGen = state.runGen;
-  const endpoint = runType === 'dfir' ? '/api/report'
-    : runType === 'ioc' ? '/api/ioc'
-    : '/api/hayabusa';
 
-  const totalDuration = pipeline.duration;
-  const stages = pipeline.stages;
-  const nStages = stages.length;
-  let currentStageIdx = -1;
-  const startedAt = Date.now();
-  const consoleCount = { n: 0 };
+/* ------------------------------------------------------------
+   Stage + stat rendering
+   ------------------------------------------------------------ */
 
-  let jobId = null;
-  let jobDone = false;
-  let jobFailed = false;
-  let jobErrorMsg = null;
-  let logsSince = 0;
+function resetStagesAndStats(
+  stages,
+  statCards,
+  runType
+) {
 
-  function fail(message) {
-    jobFailed = true;
-    jobErrorMsg = message;
-  }
+  stages.forEach(function (s) {
 
-  function pollStatus() {
-    if (state.runGen !== myGen) return; // superseded by a newer run
-    apiGet('/api/status/' + jobId).then(function (res) {
-      if (state.runGen !== myGen) return;
-      if (res.status === 'completed') {
-        return apiGet('/api/result/' + jobId).then(function (result) {
-          state.jobId = jobId;
-          state.resultPaths = result;
-          jobDone = true;
-        });
-      }
-      if (res.status === 'failed') {
-        fail('Pipeline failed on the server. Check the API logs for details.');
-        return;
-      }
-      // queued | running — keep polling.
-      setTimeout(pollStatus, 2000);
-    }).catch(function (err) {
-      fail('Lost contact with the API: ' + err.message);
-    });
-  }
+    const el =
+      $(stageId(s.id));
 
-  // Streams the job's real console output into the log panel, one
-  // second at a time, until the job finishes (successfully or not).
-  function pollLogs() {
-    if (state.runGen !== myGen || !jobId || jobDone || jobFailed) return;
-    apiGet('/api/logs/' + jobId + '?since=' + logsSince).then(function (res) {
-      if (state.runGen !== myGen) return;
-      logsSince = res.next_offset;
-      res.logs.forEach(function (line) { appendRealLog(line, consoleCount); });
-      if (!jobDone && !jobFailed) setTimeout(pollLogs, 1000);
-    }).catch(function () {
-      // Transient poll failure — don't kill the run over a missed
-      // log fetch, just try again shortly.
-      if (state.runGen === myGen && !jobDone && !jobFailed) setTimeout(pollLogs, 1000);
-    });
-  }
-
-  apiPost(endpoint, {}).then(function (res) {
-    if (res.status === 'not_implemented') {
-      fail('Hayabusa backend is not implemented yet.');
-      return;
+    if (el) {
+      el.classList.remove(
+        'done',
+        'running'
+      );
     }
-    jobId = res.job_id;
-    pollStatus();
-    pollLogs();
-  }).catch(function (err) {
-    fail('Could not start the job: ' + err.message);
+
+
+    const sub =
+      $(subId(s.id));
+
+    if (sub) {
+      sub.textContent =
+        s.sub;
+    }
+
+
+    const fill =
+      $(fillId(s.id));
+
+    if (fill) {
+      fill.style.height =
+        '0%';
+    }
+
   });
 
-  clearInterval(state.timer);
-  state.timer = setInterval(function () {
-    const elapsed = Date.now() - startedAt;
-    // Cosmetic progress never reaches 100% on its own — it waits
-    // for the real job to report completion.
-    const progress = jobDone ? 1 : Math.min(elapsed / totalDuration, 0.92);
 
-    $('progFill').style.width = (progress * 100).toFixed(0) + '%';
-    $('progPercent').textContent = Math.round(progress * 100) + '%';
+  stages.forEach(function (s) {
 
-    const targetStageIdx = Math.min(Math.floor(progress * nStages), nStages - 1);
-    if (targetStageIdx > currentStageIdx) {
-      markStage(targetStageIdx, stages, progress >= 1);
-      currentStageIdx = targetStageIdx;
-      $('progStageLabel').textContent = jobDone ? 'Complete' : stages[currentStageIdx].title + '…';
+    if (!s.phase) {
+      setStageDone(s.id);
     }
 
-    // Cosmetic ramp — overwritten by applyLogStats() the moment the
-    // real pipeline prints an actual count for that stat.
-    const st = pipeline.stats;
-    $('statArtifacts').textContent =
-      Math.round(st.artifacts * Math.min(progress * 2.2, 1)).toLocaleString();
-    $('statEvents').textContent =
-      Math.round(st.events * Math.max(0, Math.min((progress - 0.25) * 1.6, 1))).toLocaleString();
-    $('statIncidents').textContent =
-      Math.round(st.incidents * Math.max(0, Math.min((progress - 0.6) * 2.6, 1))).toLocaleString();
-    $('statIocs').textContent =
-      Math.round(st.iocs * Math.max(0, Math.min((progress - 0.55) * 2.3, 1))).toLocaleString();
+  });
 
-    if (jobFailed) {
-      clearInterval(state.timer);
-      clearInterval(state.elapsedTimer);
-      appendRealLog(jobErrorMsg || 'Pipeline failed.', consoleCount);
-      $('progStageLabel').textContent = 'Failed';
-      $('progBadgeText').textContent = 'Failed';
 
-      const cancelBtn = $('progCancelBtn');
-      cancelBtn.textContent = 'Back to setup';
-      cancelBtn.dataset.nav = 'new';
-      releaseRunLock();
-      return;
+  const statsRow =
+    $('statsRow');
+
+  const incidentsCard =
+    $('statIncidents')
+      ?.closest('.stat-card');
+
+  const iocsCard =
+    $('statIocs')
+      ?.closest('.stat-card');
+
+
+  if (runType === 'haya') {
+
+    if (statsRow) {
+      statsRow.classList.add(
+        'hayabusa-stats'
+      );
     }
 
-    if (jobDone) {
-      clearInterval(state.timer);
-      stages.forEach(function (s) { setStageDone(s.id); });
-      $('progStageLabel').textContent = 'Complete';
-      $('progBadge').className = 'prog-status-badge done';
-      $('progBadgeText').textContent = 'Complete';
-      $('progViewResults').style.display = 'inline-flex';
 
-      const cancelBtn = $('progCancelBtn');
-      cancelBtn.textContent = 'Back to home';
-      cancelBtn.dataset.nav = 'home';
-
-      clearInterval(state.elapsedTimer);
-      releaseRunLock();
-      prepareResults(pipeline);
+    if (incidentsCard) {
+      incidentsCard.style.display =
+        'none';
     }
-  }, 120);
+
+
+    if (iocsCard) {
+      iocsCard.style.display =
+        'none';
+    }
+
+
+    const artifactsLabel =
+      document
+        .querySelector('#statArtifacts')
+        ?.closest('.stat-card')
+        ?.querySelector('.stat-label span');
+
+
+    const eventsLabel =
+      document
+        .querySelector('#statEvents')
+        ?.closest('.stat-card')
+        ?.querySelector('.stat-label span');
+
+
+    if (artifactsLabel) {
+      artifactsLabel.textContent =
+        'EVTX files found';
+    }
+
+
+    if (eventsLabel) {
+      eventsLabel.textContent =
+        'EVTX files analyzed';
+    }
+
+
+  } else {
+
+    if (statsRow) {
+      statsRow.classList.remove(
+        'hayabusa-stats'
+      );
+    }
+
+
+    if (incidentsCard) {
+      incidentsCard.style.display =
+        '';
+    }
+
+
+    if (iocsCard) {
+      iocsCard.style.display =
+        '';
+    }
+
+
+    const artifactsLabel =
+      document
+        .querySelector('#statArtifacts')
+        ?.closest('.stat-card')
+        ?.querySelector('.stat-label span');
+
+
+    const eventsLabel =
+      document
+        .querySelector('#statEvents')
+        ?.closest('.stat-card')
+        ?.querySelector('.stat-label span');
+
+
+    if (artifactsLabel) {
+      artifactsLabel.textContent =
+        'Artifacts discovered';
+    }
+
+
+    if (eventsLabel) {
+      eventsLabel.textContent =
+        'Parsed events';
+    }
+
+  }
+
+
+  statCards.forEach(function (c) {
+
+    const el =
+      $(c.elId);
+
+    if (el) {
+      el.textContent =
+        '--';
+    }
+
+  });
+
+
+  $('progFill').style.width =
+    '0%';
+
+  $('progPercent').textContent =
+    '0%';
+
+  $('progStageLabel').textContent =
+    'Queued…';
 }
 
-function markStage(idx, stages, finalPass) {
-  for (let i = 0; i < idx; i++) setStageDone(stages[i].id);
-  const s = stages[idx];
-  const el = $(stageId(s.id));
-  if (!el) return;
 
-  if (finalPass) {
-    setStageDone(s.id);
-  } else {
-    el.classList.remove('done');
-    el.classList.add('running');
-    const sub = $(subId(s.id));
-    const fill = $(fillId(s.id));
-    if (sub) sub.textContent = s.sub;
-    if (fill) fill.style.height = '100%';
+function setStageDone(id) {
+
+  const el =
+    $(stageId(id));
+
+  if (!el) {
+    return;
+  }
+
+
+  el.classList.remove(
+    'running'
+  );
+
+  el.classList.add(
+    'done'
+  );
+
+
+  const fill =
+    $(fillId(id));
+
+  if (fill) {
+    fill.style.height =
+      '100%';
   }
 }
 
-function setStageDone(id) {
-  const el = $(stageId(id));
-  if (!el) return;
-  el.classList.remove('running');
-  el.classList.add('done');
-  const fill = $(fillId(id));
-  if (fill) fill.style.height = '100%';
+
+function renderStages(
+  stages,
+  phase,
+  jobDone
+) {
+
+  if (jobDone) {
+
+    stages.forEach(function (s) {
+      setStageDone(s.id);
+    });
+
+    return;
+  }
+
+
+  if (!phase) {
+    return;
+  }
+
+
+  let reachedCurrent =
+    false;
+
+
+  stages.forEach(function (s) {
+
+    if (!s.phase) {
+      return;
+    }
+
+
+    if (s.phase === phase) {
+
+      reachedCurrent =
+        true;
+
+
+      const el =
+        $(stageId(s.id));
+
+      if (el) {
+
+        el.classList.remove(
+          'done'
+        );
+
+        el.classList.add(
+          'running'
+        );
+      }
+
+
+      const fill =
+        $(fillId(s.id));
+
+      if (fill) {
+        fill.style.height =
+          '100%';
+      }
+
+
+    } else if (!reachedCurrent) {
+
+      setStageDone(
+        s.id
+      );
+
+    }
+
+  });
 }
 
-// Builds one pipeline-stage DOM node without innerHTML — mirrors the
-// markup that used to be assembled as an HTML string:
-//   <div class="pipe-stage" id="stage-<id>">
-//     <div class="pipe-line"><div class="pipe-line-fill" id="fill-<id>"></div></div>
-//     <div class="pipe-node"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg></div>
-//     <div class="pipe-title"><id/>title></div>
-//     <div class="pipe-sub" id="sub-<id>"></div>
-//   </div>
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
-function buildStageElement(stage) {
-  const div = document.createElement('div');
-  div.className = 'pipe-stage';
-  div.id = stageId(stage.id);
+function renderProgressPercent(
+  realPhases,
+  phase,
+  jobDone
+) {
 
-  const line = document.createElement('div');
-  line.className = 'pipe-line';
-  const lineFill = document.createElement('div');
-  lineFill.className = 'pipe-line-fill';
-  lineFill.id = fillId(stage.id);
-  line.appendChild(lineFill);
+  let pct =
+    0;
 
-  const node = document.createElement('div');
-  node.className = 'pipe-node';
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  const use = document.createElementNS(SVG_NS, 'use');
-  use.setAttribute('href', '#i-check');
-  svg.appendChild(use);
-  node.appendChild(svg);
 
-  const title = document.createElement('div');
-  title.className = 'pipe-title';
-  title.textContent = stage.title;
+  if (jobDone) {
 
-  const sub = document.createElement('div');
-  sub.className = 'pipe-sub';
-  sub.id = subId(stage.id);
+    pct =
+      100;
 
-  div.append(line, node, title, sub);
+  } else if (phase) {
+
+    const idx =
+      realPhases.indexOf(
+        phase
+      );
+
+    if (idx >= 0) {
+
+      pct =
+        Math.round(
+          (idx / realPhases.length) *
+          100
+        );
+
+    }
+
+  }
+
+
+  $('progFill').style.width =
+    pct + '%';
+
+  $('progPercent').textContent =
+    pct + '%';
+}
+
+
+function renderStatCards(
+  statCards,
+  stats
+) {
+
+  statCards.forEach(function (c) {
+
+    const el =
+      $(c.elId);
+
+    if (!el) {
+      return;
+    }
+
+
+    const has =
+      stats &&
+      Object.prototype.hasOwnProperty.call(
+        stats,
+        c.statKey
+      );
+
+
+    el.textContent =
+      has
+        ? Number(
+            stats[c.statKey]
+          ).toLocaleString()
+        : '--';
+
+  });
+}
+
+
+function renderStageLabel(
+  stages,
+  phase,
+  jobDone,
+  runType
+) {
+
+  if (jobDone) {
+
+    $('progStageLabel').textContent =
+      runType === 'haya'
+        ? '✔ Hayabusa analysis completed'
+        : '✔ Investigation completed';
+
+    return;
+  }
+
+
+  if (!phase) {
+
+    $('progStageLabel').textContent =
+      'Queued…';
+
+    return;
+  }
+
+
+  const active =
+    stages.find(function (s) {
+      return s.phase === phase;
+    });
+
+
+  $('progStageLabel').textContent =
+    active
+      ? active.title + '…'
+      : phase;
+}
+
+
+/* ------------------------------------------------------------
+   REAL PIPELINE RUNNER
+   ------------------------------------------------------------ */
+
+function runRealPipeline(
+  runType,
+  pipeline
+) {
+
+  const myGen =
+    state.runGen;
+
+
+  const endpoint =
+    runType === 'dfir'
+      ? '/api/report'
+      : runType === 'ioc'
+        ? '/api/ioc'
+        : '/api/hayabusa';
+
+
+  const stages =
+    pipeline.stages;
+
+
+  const realPhases =
+    stages
+      .filter(function (s) {
+        return s.phase;
+      })
+      .map(function (s) {
+        return s.phase;
+      });
+
+
+  const statCards =
+    STAT_CARD_CONFIG[runType] || [];
+
+
+  const consoleCount =
+    { n: 0 };
+
+
+  let jobId =
+    null;
+
+  let jobDone =
+    false;
+
+  let jobFailed =
+    false;
+
+  let jobErrorMsg =
+    null;
+
+  let logsSince =
+    0;
+
+
+  resetStagesAndStats(
+    stages,
+    statCards,
+    runType
+  );
+
+
+  $('progTitle').textContent =
+    runType === 'haya'
+      ? 'Hayabusa analysis in progress'
+      : 'Investigation in progress';
+
+
+  $('progRunLabel').textContent =
+    pipeline.label;
+
+
+  function fail(message) {
+
+    jobFailed =
+      true;
+
+    jobErrorMsg =
+      message;
+  }
+
+
+  function finish() {
+
+    clearInterval(
+      state.elapsedTimer
+    );
+
+
+    if (jobFailed) {
+
+      appendRealLog(
+        jobErrorMsg ||
+        'Pipeline failed.',
+        consoleCount
+      );
+
+
+      $('progStageLabel').textContent =
+        'Failed';
+
+
+      $('progBadgeText').textContent =
+        'Failed';
+
+
+      const cancelBtn =
+        $('progCancelBtn');
+
+
+      cancelBtn.textContent =
+        'Back to setup';
+
+
+      cancelBtn.dataset.nav =
+        'new';
+
+
+      releaseRunLock();
+
+      return;
+    }
+
+
+    if (jobDone) {
+
+      $('progBadge').className =
+        'prog-status-badge done';
+
+
+      $('progBadgeText').textContent =
+        'Complete';
+
+
+      $('progViewResults').style.display =
+        'inline-flex';
+
+
+      const cancelBtn =
+        $('progCancelBtn');
+
+
+      cancelBtn.textContent =
+        'Back to home';
+
+
+      cancelBtn.dataset.nav =
+        'home';
+
+
+      releaseRunLock();
+
+
+      prepareResults(
+        pipeline
+      );
+    }
+  }
+
+
+  function pollStatus() {
+
+    if (
+      state.runGen !== myGen ||
+      !jobId
+    ) {
+      return;
+    }
+
+
+    apiGet(
+      '/api/status/' +
+      jobId
+    )
+
+      .then(function (res) {
+
+        if (
+          state.runGen !== myGen
+        ) {
+          return;
+        }
+
+
+        /*
+         * Always use structured backend
+         * statistics.
+         */
+        state.jobStats =
+          res.stats || {};
+
+
+        renderStatCards(
+          statCards,
+          state.jobStats
+        );
+
+
+        renderStages(
+          stages,
+          res.phase,
+          res.status === 'completed'
+        );
+
+
+        renderProgressPercent(
+          realPhases,
+          res.phase,
+          res.status === 'completed'
+        );
+
+
+        renderStageLabel(
+          stages,
+          res.phase,
+          res.status === 'completed',
+          runType
+        );
+
+
+        /* --------------------------------
+           COMPLETED
+           -------------------------------- */
+
+        if (
+          res.status === 'completed'
+        ) {
+
+          /*
+           * First retrieve the actual result
+           * information.
+           */
+          return apiGet(
+            '/api/result/' +
+            jobId
+          )
+
+            .then(function (result) {
+
+              if (
+                state.runGen !== myGen
+              ) {
+                return;
+              }
+
+
+              state.jobId =
+                jobId;
+
+
+              state.resultPaths =
+                result;
+
+
+              /*
+               * Mark the backend job done,
+               * but DON'T finish the UI yet.
+               */
+              jobDone =
+                true;
+
+
+              /*
+               * CRITICAL:
+               *
+               * Fetch the final log batch before
+               * calling finish().
+               *
+               * This fixes the race where the
+               * status request says "completed"
+               * while the final Hayabusa output
+               * hasn't been displayed yet.
+               */
+              return pollLogs(
+                true
+              )
+
+                .then(function () {
+
+                  if (
+                    state.runGen !== myGen
+                  ) {
+                    return;
+                  }
+
+
+                  finish();
+
+                });
+
+            });
+
+        }
+
+
+        /* --------------------------------
+           FAILED
+           -------------------------------- */
+
+        if (
+          res.status === 'failed'
+        ) {
+
+          fail(
+            'Pipeline failed on the server. Check the API logs for details.'
+          );
+
+
+          finish();
+
+          return;
+        }
+
+
+        /*
+         * queued | running
+         */
+        setTimeout(
+          pollStatus,
+          1000
+        );
+
+      })
+
+      .catch(function (err) {
+
+        if (
+          state.runGen !== myGen
+        ) {
+          return;
+        }
+
+
+        fail(
+          'Lost contact with the API: ' +
+          err.message
+        );
+
+
+        finish();
+
+      });
+  }
+
+
+  /* ------------------------------------------------------------
+     REAL LOG POLLING
+
+     finalFetch=true:
+       Used once after the backend reports completed.
+
+     This function returns a Promise specifically so the status
+     poll can wait for the final logs before showing COMPLETE.
+     ------------------------------------------------------------ */
+
+  function pollLogs(
+    finalFetch
+  ) {
+
+    finalFetch =
+      finalFetch === true;
+
+
+    if (
+      state.runGen !== myGen ||
+      !jobId ||
+      jobFailed
+    ) {
+
+      return Promise.resolve();
+
+    }
+
+
+    return apiGet(
+      '/api/logs/' +
+      jobId +
+      '?since=' +
+      logsSince
+    )
+
+      .then(function (res) {
+
+        if (
+          state.runGen !== myGen
+        ) {
+          return;
+        }
+
+
+        const previousOffset =
+          logsSince;
+
+
+        /*
+         * Keep the current offset if the API
+         * doesn't provide a valid one.
+         */
+        if (
+          Number.isFinite(
+            Number(
+              res.next_offset
+            )
+          )
+        ) {
+
+          logsSince =
+            Number(
+              res.next_offset
+            );
+
+        }
+
+
+        const logLines =
+          Array.isArray(res.lines)
+            ? res.lines
+            : (
+                Array.isArray(res.logs)
+                  ? res.logs
+                  : []
+              );
+
+
+        logLines.forEach(
+          function (entry) {
+
+            const text =
+              typeof entry === 'string'
+                ? entry
+                : entry &&
+                  entry.text;
+
+
+            if (text) {
+
+              appendRealLog(
+                text,
+                consoleCount
+              );
+
+            }
+
+          }
+        );
+
+
+        /*
+         * FINAL FETCH
+         *
+         * If new log data arrived, make one
+         * additional request to ensure we have
+         * consumed the final batch.
+         */
+        if (finalFetch) {
+
+          if (
+            logsSince !== previousOffset &&
+            logLines.length > 0
+          ) {
+
+            return pollLogs(
+              true
+            );
+
+          }
+
+
+          return;
+
+        }
+
+
+        /*
+         * NORMAL POLLING
+         */
+        if (
+          !jobDone &&
+          !jobFailed
+        ) {
+
+          setTimeout(
+            function () {
+              pollLogs(false);
+            },
+            1000
+          );
+
+        }
+
+      })
+
+      .catch(function (err) {
+
+        /*
+         * Log polling failure must NOT fail
+         * the actual Hayabusa/DFIR job.
+         */
+
+        if (
+          !finalFetch &&
+          state.runGen === myGen &&
+          !jobDone &&
+          !jobFailed
+        ) {
+
+          setTimeout(
+            function () {
+              pollLogs(false);
+            },
+            1000
+          );
+
+        }
+
+
+        if (finalFetch) {
+
+          console.warn(
+            'Final log fetch failed:',
+            err
+          );
+
+        }
+
+      });
+
+  }
+
+
+  /* ------------------------------------------------------------
+     START BACKEND JOB
+     ------------------------------------------------------------ */
+
+  apiPost(
+    endpoint,
+    {}
+  )
+
+    .then(function (res) {
+
+      if (
+        res.status ===
+        'not_implemented'
+      ) {
+
+        fail(
+          'Hayabusa backend is not implemented yet.'
+        );
+
+
+        finish();
+
+        return;
+      }
+
+
+      jobId =
+        res.job_id;
+
+
+      /*
+       * Start both independent polling loops.
+       */
+      pollStatus();
+
+      pollLogs(false);
+
+    })
+
+    .catch(function (err) {
+
+      fail(
+        'Could not start the job: ' +
+        err.message
+      );
+
+
+      finish();
+
+    });
+
+}
+
+
+/* ------------------------------------------------------------
+   Build pipeline stage DOM
+   ------------------------------------------------------------ */
+
+const SVG_NS =
+  'http://www.w3.org/2000/svg';
+
+
+function buildStageElement(
+  stage
+) {
+
+  const div =
+    document.createElement(
+      'div'
+    );
+
+
+  div.className =
+    'pipe-stage';
+
+
+  div.id =
+    stageId(
+      stage.id
+    );
+
+
+  const line =
+    document.createElement(
+      'div'
+    );
+
+
+  line.className =
+    'pipe-line';
+
+
+  const lineFill =
+    document.createElement(
+      'div'
+    );
+
+
+  lineFill.className =
+    'pipe-line-fill';
+
+
+  lineFill.id =
+    fillId(
+      stage.id
+    );
+
+
+  line.appendChild(
+    lineFill
+  );
+
+
+  const node =
+    document.createElement(
+      'div'
+    );
+
+
+  node.className =
+    'pipe-node';
+
+
+  const svg =
+    document.createElementNS(
+      SVG_NS,
+      'svg'
+    );
+
+
+  svg.setAttribute(
+    'viewBox',
+    '0 0 24 24'
+  );
+
+
+  const use =
+    document.createElementNS(
+      SVG_NS,
+      'use'
+    );
+
+
+  use.setAttribute(
+    'href',
+    '#i-check'
+  );
+
+
+  svg.appendChild(
+    use
+  );
+
+
+  node.appendChild(
+    svg
+  );
+
+
+  const title =
+    document.createElement(
+      'div'
+    );
+
+
+  title.className =
+    'pipe-title';
+
+
+  title.textContent =
+    stage.title;
+
+
+  const sub =
+    document.createElement(
+      'div'
+    );
+
+
+  sub.className =
+    'pipe-sub';
+
+
+  sub.id =
+    subId(
+      stage.id
+    );
+
+
+  div.append(
+    line,
+    node,
+    title,
+    sub
+  );
+
+
   return div;
 }
-
-
